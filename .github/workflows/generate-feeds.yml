@@ -23,6 +23,9 @@ jobs:
       FEEDS_WORKDIR: _feeds                 # where the private repo is checked out
       FEEDS_DIR: _feeds/docs/feeds          # output folder inside private repo
       TOKEN_MAP_PATH: _feeds/token_map.json # token map in private repo
+      SOURCE_ICS_URL: ${{ secrets.SOURCE_ICS_URL }}
+      FEEDS_REPO: ${{ secrets.FEEDS_REPO }}
+      FEEDS_REPO_TOKEN: ${{ secrets.FEEDS_REPO_TOKEN }}
       BASE_URL: ${{ secrets.BASE_URL }}
 
     steps:
