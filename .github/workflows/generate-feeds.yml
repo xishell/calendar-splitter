@@ -58,8 +58,8 @@ jobs:
           FEEDS_DIR: ${{ env.FEEDS_DIR }}
           TOKEN_MAP_PATH: ${{ env.TOKEN_MAP_PATH }}
           BASE_URL: ${{ env.BASE_URL }}
-          EVENTS_DIR: ${{ env.FEEDS_WORKDIR }}/events   # ✅ moved here
-        run: python scripts/split_personal_ics.py
+          EVENTS_DIR: ${{ env.FEEDS_WORKDIR }}/events
+        run: python scripts/split_ics.py
 
       - name: Update README with Course → UUID → URL table
         working-directory: ${{ env.FEEDS_WORKDIR }}
