@@ -3,12 +3,12 @@ from __future__ import annotations
 import hashlib
 import json
 import time
-from typing import Optional, Dict, Any
 from pathlib import Path
+from typing import Any, Dict, Optional
 
 import requests
 
-from .log_sanitize import safe_log, safe_warn, safe_error
+from .log_sanitize import safe_error, safe_log, safe_warn
 
 
 def _sha256_bytes(b: bytes) -> str:
@@ -72,7 +72,7 @@ def fetch_upstream_if_changed(
     except Exception as e:
         safe_warn("HEAD failed; will GET with conditionals. (%s)", str(e))
 
-    headers = {}
+    headers: Dict[str, str] = {}
     if etag_prev:
         headers["If-None-Match"] = etag_prev
     elif lm_prev:
@@ -101,7 +101,7 @@ def fetch_upstream_if_changed(
     etag_used = etag_curr or res.headers.get("ETag")
     lm_used = lm_curr or res.headers.get("Last-Modified")
 
-    new_state = {"mode": "http", "sha256": new_hash, "updated_at": int(time.time())}
+    new_state: Dict[str, Any] = {"mode": "http", "sha256": new_hash, "updated_at": int(time.time())}
     if etag_used:
         new_state["etag"] = etag_used
     if lm_used:

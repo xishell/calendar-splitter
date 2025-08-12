@@ -4,10 +4,9 @@ import json
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, Any, Optional, List
+from typing import Any, Dict, Optional
 
 from .log_sanitize import safe_log, safe_warn
-
 
 DEFAULT_SUMMARY_RE = re.compile(r"\bLecture\s*(\d+)\b", re.IGNORECASE)
 
@@ -26,7 +25,7 @@ class CourseRules:
 
     @staticmethod
     def from_json(data: Dict[str, Any]) -> "CourseRules":
-        # Schema A (e.g., your IS1200_lectures.json)
+        # Schema A
         if "course" in data:
             course = str(data["course"]).strip()
             cr = CourseRules(course)
@@ -57,14 +56,14 @@ class CourseRules:
                 }
             return cr
 
-        # Schema B (earlier style)
+        # Schema B
         course = str(data.get("course_code", "")).strip()
         if not course:
             raise ValueError("Missing course/course_code")
         cr = CourseRules(course)
         cr.canvas = (data.get("canvas_url") or "").strip() or None
 
-        def ingest(arr, dest):
+        def ingest(arr: Optional[list], dest: Dict[int, Dict[str, str]]) -> None:
             for item in (arr or []):
                 try:
                     n = int(item.get("number"))

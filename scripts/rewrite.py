@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import re
-from typing import Optional, Tuple, List
+from typing import List, Optional, Tuple
+
 from icalendar import Calendar, vText
 
 from .rules import CourseRules
@@ -25,7 +26,7 @@ def detect_course_code(summary: str, description: str) -> Optional[str]:
     return None
 
 
-def extract_number_and_kind(summary: str, cr: Optional[CourseRules]):
+def extract_number_and_kind(summary: str, cr: Optional[CourseRules]) -> Tuple[Optional[int], Optional[str]]:
     s = summary or ""
     if cr and cr.summary_regex:
         m = cr.summary_regex.search(s)
@@ -55,7 +56,7 @@ def extract_number_and_kind(summary: str, cr: Optional[CourseRules]):
     return None, None
 
 
-def rewrite_event(summary: str, description: str, course: str, cr: Optional[CourseRules]):
+def rewrite_event(summary: str, description: str, course: str, cr: Optional[CourseRules]) -> Tuple[str, str]:
     if not cr:
         return summary, description or ""
 
@@ -64,7 +65,9 @@ def rewrite_event(summary: str, description: str, course: str, cr: Optional[Cour
         return summary, description or ""
 
     n, kind = extract_number_and_kind(summary, cr)
-    title = module = None
+    title = None
+    module = None
+
     if n is not None:
         info = None
         if kind == "lecture":
@@ -74,8 +77,10 @@ def rewrite_event(summary: str, description: str, course: str, cr: Optional[Cour
         elif kind == "exercise":
             info = cr.exercises.get(n)
         if info:
-            title = (info.get("title") or "").strip() or None
-            module = (info.get("module") or "").strip() or None
+            t = (info.get("title") or "").strip()
+            m = (info.get("module") or "").strip()
+            title = t or None
+            module = m or None
 
     # SUMMARY
     new_summary = summary

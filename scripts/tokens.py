@@ -20,6 +20,6 @@ def save_token_map(path: Path, mapping: Dict[str, str]) -> None:
 def ensure_token(token_map: Dict[str, str], course: str) -> str:
     if course in token_map and token_map[course]:
         return token_map[course]
-    new_tok = uuid.uuid4().hex[:16]  # stable enough; raise to 24/32 if you want
+    new_tok = uuid.uuid4().hex[:16]
     token_map[course] = new_tok
     return new_tok
