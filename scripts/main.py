@@ -5,6 +5,7 @@ import os
 import sys
 from pathlib import Path
 
+from typing import cast
 from .fetch import fetch_upstream_if_changed
 from .log_sanitize import safe_error, safe_log, setup_logging
 from .rules import load_course_rules_dir
@@ -33,7 +34,7 @@ def main() -> int:
         return 2
 
     source_url = os.environ.get("SOURCE_ICS_URL", "")
-    local_fallback = _env_path("LOCAL_UPSTREAM_ICS", "personal.ics")
+    local_fallback = cast(Path, _env_path("LOCAL_UPSTREAM_ICS", "personal.ics"))
 
     upstream = fetch_upstream_if_changed(source_url, local_fallback, state_path)
     if upstream is None:
