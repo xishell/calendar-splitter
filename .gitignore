@@ -1,0 +1,7 @@
+# don’t commit secrets/state
+token_map.json
+# if you sometimes fetch locally instead of Actions
+personal.ics
+docs/
+events
+dockerfile
