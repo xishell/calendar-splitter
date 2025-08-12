@@ -1,121 +1,89 @@
-name: Generate & Publish Calendar Feeds
+name: Generate tokenized calendar feeds
 
 on:
+  workflow_dispatch: {}
   schedule:
-    - cron: '0 6 * * *'
-  workflow_dispatch:
-  push:
-    branches: [ main ]
-    paths:
-      - 'scripts/**'
-      - 'config/**'
-      - 'requirements.txt'
-      - '.github/workflows/generate-feeds.yml'
+    # 06:00 Europe/Stockholm ≈ 04:00 UTC
+    - cron: '0 4 * * *'
 
 permissions:
-  contents: read
+  contents: write
+
+env:
+  FEEDS_DIR: docs/feeds
+  FEEDS_WORKDIR: _feeds
+  EVENTS_DIR: _feeds/events
+  TOKEN_MAP_PATH: _feeds/token_map.json
+  UPSTREAM_STATE_PATH: _feeds/upstream_state.json
+  PYTHONUNBUFFERED: '1'
 
 jobs:
-  build-and-publish:
+  build:
     runs-on: ubuntu-latest
 
-    env:
-      FEEDS_WORKDIR: _feeds
-      FEEDS_DIR: _feeds/docs/feeds
-      TOKEN_MAP_PATH: _feeds/token_map.json
-      BASE_URL: ${{ secrets.BASE_URL }}
-
     steps:
-      - name: Checkout public repo
+      - name: Checkout public repo (site)
         uses: actions/checkout@v4
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-
-      - name: Install dependencies
-        run: pip install --no-cache-dir -r requirements.txt
 
       - name: Checkout private feeds repo
         uses: actions/checkout@v4
         with:
-          repository: ${{ secrets.FEEDS_REPO }}
-          token: ${{ secrets.FEEDS_REPO_TOKEN }}
-          path: ${{ env.FEEDS_WORKDIR }}
+          repository: ${{ secrets.FEEDS_REPO }}   # e.g. yourorg/private-feeds
+          token: ${{ secrets.FEEDS_REPO_TOKEN }}  # classic PAT with repo access
+          path: _feeds
 
-      - name: Ensure Pages structure exists
+      # Mask known secrets so they won’t appear if accidentally echoed
+      - name: Mask secrets in logs
         run: |
-          mkdir -p "${{ env.FEEDS_DIR }}"
-          touch "${{ env.FEEDS_WORKDIR }}/docs/.nojekyll"
-          if [ ! -f "${{ env.FEEDS_WORKDIR }}/docs/CNAME" ]; then
-            echo "${{ secrets.PAGES_CNAME }}" > "${{ env.FEEDS_WORKDIR }}/docs/CNAME"
-          fi
+          echo "::add-mask::${{ secrets.SOURCE_ICS_URL }}"
+          echo "::add-mask::${{ secrets.BASE_URL }}"
+          echo "::add-mask::${{ secrets.FEEDS_REPO_TOKEN }}"
+          echo "::add-mask::${{ secrets.FEEDS_REPO }}"
 
-      - name: Generate feeds (uses private repo's events/)
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
+          restore-keys: ${{ runner.os }}-pip-
+
+      - name: Install deps
+        run: pip install -r requirements.txt
+
+      - name: Ensure site folders
+        run: |
+          mkdir -p docs/feeds
+          touch docs/.nojekyll
+
+      - name: Generate feeds
         env:
+          # upstream URL optional; if empty, script uses local fallback (personal.ics)
           SOURCE_ICS_URL: ${{ secrets.SOURCE_ICS_URL }}
-          FEEDS_DIR: ${{ env.FEEDS_DIR }}
+          # where to read course rules + where to persist token/state
+          EVENTS_DIR: ${{ env.EVENTS_DIR }}
           TOKEN_MAP_PATH: ${{ env.TOKEN_MAP_PATH }}
-          BASE_URL: ${{ env.BASE_URL }}
-          EVENTS_DIR: ${{ env.FEEDS_WORKDIR }}/events
-        run: python scripts/split-ics.py
+          UPSTREAM_STATE_PATH: ${{ env.UPSTREAM_STATE_PATH }}
+          # where to write public ICS feeds
+          FEEDS_DIR: ${{ env.FEEDS_DIR }}
+          # quiet logging; set DEBUG for local runs only
+          LOG_LEVEL: INFO
+        run: python -m scripts.main
 
-      - name: Update README with Course → UUID → URL table
-        working-directory: ${{ env.FEEDS_WORKDIR }}
-        env:
-          BASE_URL: ${{ env.BASE_URL }}
+      # Commit only when there are changes (script exits 0 even when skipping)
+      - name: Commit & push updated feeds
         run: |
-          python - <<'PY'
-          import os, json, pathlib, re
-          root = pathlib.Path(".")
-          token_map = json.loads((root/"token_map.json").read_text(encoding="utf-8"))
-          base = os.environ.get("BASE_URL","").rstrip("/") or "https://example.invalid/feeds"
-
-          rows = []
-          for course in sorted(token_map):
-              tok = token_map[course]
-              url = f"{base}/{course}--{tok}.ics"
-              rows.append(f"| `{course}` | `{tok}` | {url} |")
-          table = "\n".join(["| Course | UUID | Feed URL |","|---|---|---|",*rows])
-
-          start, end = "<!-- BEGIN FEED TABLE -->", "<!-- END FEED TABLE -->"
-          header = root/"README.header.md"
-          readme = root/"README.md"
-
-          if header.exists():
-              content = header.read_text(encoding="utf-8")
-              if start in content and end in content:
-                  content = re.sub(rf"{re.escape(start)}.*?{re.escape(end)}",
-                                   f"{start}\n{table}\n{end}", content, flags=re.S)
-              else:
-                  content = content.rstrip()+"\n\n"+table+"\n"
-              footer = root/"README.footer.md"
-              if footer.exists():
-                  content = content.rstrip()+"\n\n"+footer.read_text(encoding="utf-8").rstrip()+"\n"
-              readme.write_text(content, encoding="utf-8")
-          else:
-              if readme.exists():
-                  txt = readme.read_text(encoding="utf-8")
-                  if start in txt and end in txt:
-                      txt = re.sub(rf"{re.escape(start)}.*?{re.escape(end)}",
-                                   f"{start}\n{table}\n{end}", txt, flags=re.S)
-                      readme.write_text(txt, encoding="utf-8")
-                  else:
-                      readme.write_text("# Calendar Feeds\n\n"+table+"\n", encoding="utf-8")
-              else:
-                  readme.write_text("# Calendar Feeds\n\n"+table+"\n", encoding="utf-8")
-          PY
-
-      - name: Commit & push to private repo
-        working-directory: ${{ env.FEEDS_WORKDIR }}
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add docs/feeds/*.ics token_map.json docs/CNAME docs/.nojekyll README.md README.header.md README.footer.md 2>/dev/null || true
-          if ! git diff --cached --quiet; then
-            git commit -m "Update tokenized feeds & README"
-            git push
-          else
-            echo "No changes to publish."
+          if git diff --quiet; then
+            echo "No changes to commit."
+            exit 0
           fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/feeds/*.ics || true
+          git add docs/.nojekyll || true
+          git commit -m "Update tokenized feeds"
+          git push
