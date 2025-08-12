@@ -9,7 +9,6 @@ on:
     paths:
       - 'scripts/**'
       - 'config/**'
-      - 'events/**'
       - 'requirements.txt'
       - '.github/workflows/generate-feeds.yml'
 
@@ -24,8 +23,7 @@ jobs:
       FEEDS_WORKDIR: _feeds
       FEEDS_DIR: _feeds/docs/feeds
       TOKEN_MAP_PATH: _feeds/token_map.json
-      BASE_URL: ${{ secrets.BASE_URL }}    # <- secret
-      EVENTS_DIR: ${{ env.FEEDS_WORKDIR }}/events
+      BASE_URL: ${{ secrets.BASE_URL }}
 
     steps:
       - name: Checkout public repo
@@ -42,8 +40,8 @@ jobs:
       - name: Checkout private feeds repo
         uses: actions/checkout@v4
         with:
-          repository: ${{ secrets.FEEDS_REPO }}      # <- secret, e.g. youruser/calendar-feeds
-          token: ${{ secrets.FEEDS_REPO_TOKEN }}     # <- secret PAT with contents:write
+          repository: ${{ secrets.FEEDS_REPO }}
+          token: ${{ secrets.FEEDS_REPO_TOKEN }}
           path: ${{ env.FEEDS_WORKDIR }}
 
       - name: Ensure Pages structure exists
@@ -51,17 +49,17 @@ jobs:
           mkdir -p "${{ env.FEEDS_DIR }}"
           touch "${{ env.FEEDS_WORKDIR }}/docs/.nojekyll"
           if [ ! -f "${{ env.FEEDS_WORKDIR }}/docs/CNAME" ]; then
-            echo "${{ secrets.PAGES_CNAME }}" > "${{ env.FEEDS_WORKDIR }}/docs/CNAME"   # <- secret CNAME
+            echo "${{ secrets.PAGES_CNAME }}" > "${{ env.FEEDS_WORKDIR }}/docs/CNAME"
           fi
 
       - name: Generate feeds (uses private repo's events/)
         env:
-          SOURCE_ICS_URL: ${{ secrets.SOURCE_ICS_URL }}  # <- secret upstream ICS
+          SOURCE_ICS_URL: ${{ secrets.SOURCE_ICS_URL }}
           FEEDS_DIR: ${{ env.FEEDS_DIR }}
           TOKEN_MAP_PATH: ${{ env.TOKEN_MAP_PATH }}
           BASE_URL: ${{ env.BASE_URL }}
-          EVENTS_DIR: ${{ env.EVENTS_DIR }}
-        run: python scripts/split_ics.py
+          EVENTS_DIR: ${{ env.FEEDS_WORKDIR }}/events   # ✅ moved here
+        run: python scripts/split_personal_ics.py
 
       - name: Update README with Course → UUID → URL table
         working-directory: ${{ env.FEEDS_WORKDIR }}
