@@ -9,6 +9,7 @@ on:
     paths:
       - 'scripts/**'
       - 'config/**'
+      - 'events/**'
       - 'requirements.txt'
       - '.github/workflows/generate-feeds.yml'
 
@@ -20,13 +21,11 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      FEEDS_WORKDIR: _feeds                 # where the private repo is checked out
-      FEEDS_DIR: _feeds/docs/feeds          # output folder inside private repo
-      TOKEN_MAP_PATH: _feeds/token_map.json # token map in private repo
-      SOURCE_ICS_URL: ${{ secrets.SOURCE_ICS_URL }}
-      FEEDS_REPO: ${{ secrets.FEEDS_REPO }}
-      FEEDS_REPO_TOKEN: ${{ secrets.FEEDS_REPO_TOKEN }}
-      BASE_URL: ${{ secrets.BASE_URL }}
+      FEEDS_WORKDIR: _feeds
+      FEEDS_DIR: _feeds/docs/feeds
+      TOKEN_MAP_PATH: _feeds/token_map.json
+      BASE_URL: ${{ secrets.BASE_URL }}    # <- secret
+      EVENTS_DIR: ${{ env.FEEDS_WORKDIR }}/events
 
     steps:
       - name: Checkout public repo
@@ -43,8 +42,8 @@ jobs:
       - name: Checkout private feeds repo
         uses: actions/checkout@v4
         with:
-          repository: ${{ secrets.FEEDS_REPO }}      # e.g. youruser/calendar-feeds
-          token: ${{ secrets.FEEDS_REPO_TOKEN }}     # PAT with contents:write to that repo
+          repository: ${{ secrets.FEEDS_REPO }}      # <- secret, e.g. youruser/calendar-feeds
+          token: ${{ secrets.FEEDS_REPO_TOKEN }}     # <- secret PAT with contents:write
           path: ${{ env.FEEDS_WORKDIR }}
 
       - name: Ensure Pages structure exists
@@ -52,17 +51,17 @@ jobs:
           mkdir -p "${{ env.FEEDS_DIR }}"
           touch "${{ env.FEEDS_WORKDIR }}/docs/.nojekyll"
           if [ ! -f "${{ env.FEEDS_WORKDIR }}/docs/CNAME" ]; then
-            echo "calendar.example.com" > "${{ env.FEEDS_WORKDIR }}/docs/CNAME"
+            echo "${{ secrets.PAGES_CNAME }}" > "${{ env.FEEDS_WORKDIR }}/docs/CNAME"   # <- secret CNAME
           fi
 
-      - name: Generate feeds (reads events/ from private repo)
+      - name: Generate feeds (uses private repo's events/)
         env:
-          SOURCE_ICS_URL: ${{ secrets.SOURCE_ICS_URL }}
+          SOURCE_ICS_URL: ${{ secrets.SOURCE_ICS_URL }}  # <- secret upstream ICS
           FEEDS_DIR: ${{ env.FEEDS_DIR }}
           TOKEN_MAP_PATH: ${{ env.TOKEN_MAP_PATH }}
           BASE_URL: ${{ env.BASE_URL }}
-          EVENTS_DIR: ${{ env.FEEDS_WORKDIR }}/events   # <-- key change
-        run: python scripts/split_personal_ics.py
+          EVENTS_DIR: ${{ env.EVENTS_DIR }}
+        run: python scripts/split_ics.py
 
       - name: Update README with Course → UUID → URL table
         working-directory: ${{ env.FEEDS_WORKDIR }}
@@ -73,7 +72,7 @@ jobs:
           import os, json, pathlib, re
           root = pathlib.Path(".")
           token_map = json.loads((root/"token_map.json").read_text(encoding="utf-8"))
-          base = os.environ.get("BASE_URL","https://calendar.example.com/feeds").rstrip("/")
+          base = os.environ.get("BASE_URL","").rstrip("/") or "https://example.invalid/feeds"
 
           rows = []
           for course in sorted(token_map):
