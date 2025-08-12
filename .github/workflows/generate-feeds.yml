@@ -2,7 +2,7 @@ name: Generate & Publish Calendar Feeds
 
 on:
   schedule:
-    - cron: '*/30 * * * *'
+    - cron: '0 6 * * *'
   workflow_dispatch:
   push:
     branches: [ main ]
