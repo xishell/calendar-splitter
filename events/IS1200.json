@@ -1,0 +1,26 @@
+{
+  "course_code": "IS1200",
+  "canvas_url": "https://canvas.kth.se/courses/56261",
+  "lectures": [
+    { "number": 1, "title": "Course Introduction", "module": "Module 1: C and Assembly Programming" },
+    { "number": 2, "title": "Assembly Languages", "module": "Module 1: C and Assembly Programming" },
+    { "number": 3, "title": "Machine Languages", "module": "Module 1: C and Assembly Programming" },
+    { "number": 4, "title": "The C Programming Language", "module": "Module 1: C and Assembly Programming" },
+    { "number": 5, "title": "I/O Systems (part I)", "module": "Module 2: I/O Systems" },
+    { "number": 6, "title": "I/O Systems (part II)", "module": "Module 2: I/O Systems" },
+    { "number": 7, "title": "Combinatorial Logic", "module": "Module 3: Logic Design (Note: This module is only part of IS1500.)" },
+    { "number": 8, "title": "Sequential Logic", "module": "Module 3: Logic Design (Note: This module is only part of IS1500.)" },
+    { "number": 9, "title": "ALU and Single-Cycle Processors", "module": "Module 4: Processor Design" },
+    { "number": 10, "title": "Pipelined Processors", "module": "Module 4: Processor Design" },
+    { "number": 11, "title": "Memory Hierarchy", "module": "Module 5: Memory Hierarchy" },
+    { "number": 12, "title": "Parallelism, Concurrency, Speedup, and ILP", "module": "Module 6: Parallel Processors and Programs" },
+    { "number": 13, "title": "SIMD, MIMD, and Parallel Programming", "module": "Module 6: Parallel Processors and Programs" },
+    { "number": 14, "title": "Course Summary and Project Awards", "module": "Modules 1-6" }
+  ],
+  "labs": [
+    { "number": 1, "title": "Assembly Programming", "module": "Module 1: C and Assembly Programming" },
+    { "number": 2, "title": "C Programming", "module": "Module 1: C and Assembly Programming" },
+    { "number": 3, "title": "I/O Programming", "module": "Module 2: I/O Systems" },
+    { "number": 4, "title": "Processor Design", "module": "Module 4: Processor Design" }
+  ]
+}
