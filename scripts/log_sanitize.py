@@ -26,13 +26,13 @@ def setup_logging(level: str = "INFO") -> None:
     )
 
 
-def safe_log(msg: str, *a) -> None:
+def safe_log(msg: str, *a: object) -> None:
     logging.info(_redact(msg % a if a else msg))
 
 
-def safe_warn(msg: str, *a) -> None:
+def safe_warn(msg: str, *a: object) -> None:
     logging.warning(_redact(msg % a if a else msg))
 
 
-def safe_error(msg: str, *a) -> None:
+def safe_error(msg: str, *a: object) -> None:
     logging.error(_redact(msg % a if a else msg))

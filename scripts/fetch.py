@@ -19,7 +19,8 @@ def _sha256_bytes(b: bytes) -> str:
 
 def _read_state(path: Path) -> Dict[str, Any]:
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
+        result = json.loads(path.read_text(encoding="utf-8"))
+        return result if isinstance(result, dict) else {}
     except Exception:
         return {}
 

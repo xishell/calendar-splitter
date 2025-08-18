@@ -8,7 +8,8 @@ from typing import Dict
 
 def load_token_map(path: Path) -> Dict[str, str]:
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
+        result = json.loads(path.read_text(encoding="utf-8"))
+        return result if isinstance(result, dict) else {}
     except Exception:
         return {}
 
