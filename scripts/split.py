@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Dict
+from typing import Dict, cast
 
 from icalendar import Calendar, Event, vText
 
@@ -17,7 +17,7 @@ def split_and_write(
     feeds_dir: Path,
     token_map: Dict[str, str],
 ) -> int:
-    cal = Calendar.from_ical(upstream_bytes)
+    cal = cast(Calendar, Calendar.from_ical(upstream_bytes.decode('utf-8')))
 
     buckets: Dict[str, Calendar] = {}
     total = 0

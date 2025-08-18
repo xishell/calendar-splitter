@@ -1,3 +1,4 @@
+from datetime import datetime
 from icalendar import Calendar, Event, vText
 from pathlib import Path
 from scripts.split import split_and_write
@@ -11,8 +12,8 @@ def _make_ics_event(summary: str, description: str) -> bytes:
     ev.add("UID", "u1@test")
     ev.add("SUMMARY", vText(summary))
     ev.add("DESCRIPTION", vText(description))
-    ev.add("DTSTART", "20250901T100000Z")
-    ev.add("DTEND", "20250901T110000Z")
+    ev.add("DTSTART", datetime(2025, 9, 1, 10, 0, 0))
+    ev.add("DTEND", datetime(2025, 9, 1, 11, 0, 0))
     cal.add_component(ev)
     return cal.to_ical()
 
