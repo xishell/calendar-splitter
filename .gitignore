@@ -85,6 +85,7 @@ _feeds/upstream_state.json
 
 # Project-specific generated files
 out/
+docs/feeds/
 *.old
 
 # Environment variables

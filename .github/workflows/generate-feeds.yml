@@ -10,7 +10,7 @@ permissions:
   contents: write
 
 env:
-  FEEDS_DIR: docs/feeds
+  FEEDS_DIR: _feeds/docs/feeds
   FEEDS_WORKDIR: _feeds
   EVENTS_DIR: _feeds/events
   TOKEN_MAP_PATH: _feeds/token_map.json
@@ -57,8 +57,8 @@ jobs:
 
       - name: Ensure site folders
         run: |
-          mkdir -p docs/feeds
-          touch docs/.nojekyll
+          mkdir -p _feeds/docs/feeds
+          touch _feeds/docs/.nojekyll
 
       - name: Generate feeds
         env:
@@ -74,8 +74,9 @@ jobs:
           LOG_LEVEL: INFO
         run: python -m scripts.main
 
-      # Commit only when there are changes (script exits 0 even when skipping)
-      - name: Commit & push updated feeds
+      # Commit and push to the private feeds repository
+      - name: Commit & push updated feeds to private repo
+        working-directory: _feeds
         run: |
           if git diff --quiet; then
             echo "No changes to commit."
@@ -85,5 +86,7 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add docs/feeds/*.ics || true
           git add docs/.nojekyll || true
-          git commit -m "Update tokenized feeds"
+          git add token_map.json || true
+          git add upstream_state.json || true
+          git commit -m "Update tokenized feeds and state"
           git push
