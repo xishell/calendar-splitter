@@ -11,10 +11,6 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-latest
-    
-    defaults:
-      run:
-        working-directory: calendar-splitter
 
     steps:
       - name: Checkout
@@ -29,7 +25,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('calendar-splitter/requirements.txt', 'calendar-splitter/dev-requirements.txt') }}
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt', 'dev-requirements.txt') }}
           restore-keys: ${{ runner.os }}-pip-
 
       - name: Install dependencies
@@ -44,4 +40,7 @@ jobs:
         run: mypy scripts
 
       - name: Test (pytest)
-        run: pytest -q --cov=scripts --cov-report=term-missing
+        run: |
+          # Add current directory to Python path for imports
+          export PYTHONPATH="${PYTHONPATH:+${PYTHONPATH}:}$(pwd)"
+          pytest -q --cov=scripts --cov-report=term-missing
