@@ -33,3 +33,22 @@ def test_no_rewrite_when_course_missing_and_required():
     orig_sum = "Lecture 1 - Placeholder"   # no (IS1200)
     new_sum, new_desc = rewrite_event(orig_sum, "", "IS1200", cr)
     assert new_sum == orig_sum  # unchanged
+
+def test_lab_event_processing():
+    # Test with Schema B format that includes labs
+    data = {
+        "course_code": "IS1200",
+        "canvas_url": "https://canvas.kth.se/courses/56261",
+        "labs": [{"number": 2, "title": "C Programming", "module": "Module 1"}],
+        "lectures": []
+    }
+    cr = CourseRules.from_json(data)
+    
+    orig_sum = "Lab 2 - Test (IS1200)"
+    orig_desc = "Lab details."
+    new_sum, new_desc = rewrite_event(orig_sum, orig_desc, "IS1200", cr)
+    
+    assert "Lab 2 - C Programming - IS1200" == new_sum
+    assert "Module 1" in new_desc
+    assert "Canvas:" in new_desc
+    assert "Lab details." in new_desc
