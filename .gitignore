@@ -96,3 +96,5 @@ docs/feeds/
 # Logs
 *.log
 logs/
+
+events/
