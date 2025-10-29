@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+import string
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -32,6 +33,33 @@ def detect_schema(data: dict[str, Any]) -> str:
         return "A"
     else:
         raise ValueError("Cannot determine schema: missing 'course' or 'course_code'")
+
+
+def validate_template(template: str, allowed_vars: set[str], template_name: str, course: str) -> bool:
+    """Validate that template only uses allowed variables.
+
+    Returns True if valid, False if invalid (with warning logged).
+    """
+    try:
+        # Extract all variables from the template
+        formatter = string.Formatter()
+        parsed = formatter.parse(template)
+        used_vars = {field_name for _, field_name, _, _ in parsed if field_name}
+
+        invalid_vars = used_vars - allowed_vars
+        if invalid_vars:
+            safe_warn(
+                "Course %s: %s uses invalid variables: %s (allowed: %s)",
+                course,
+                template_name,
+                sorted(invalid_vars),
+                sorted(allowed_vars)
+            )
+            return False
+        return True
+    except Exception as e:
+        safe_warn("Course %s: %s has syntax error: %s", course, template_name, e)
+        return False
 
 
 @dataclass
@@ -67,9 +95,20 @@ class CourseRules:
                     cr.summary_regex = DEFAULT_SUMMARY_RE
 
             if "title_template" in data:
-                cr.title_template = str(data["title_template"])
+                tpl = str(data["title_template"])
+                allowed = {"kind", "n", "title", "course"}
+                if validate_template(tpl, allowed, "title_template", course):
+                    cr.title_template = tpl
+                else:
+                    safe_warn("Course %s: reverting to default title_template", course)
+
             if "description_template" in data:
-                cr.description_template = str(data["description_template"])
+                tpl = str(data["description_template"])
+                allowed = {"module", "canvas", "old_desc"}
+                if validate_template(tpl, allowed, "description_template", course):
+                    cr.description_template = tpl
+                else:
+                    safe_warn("Course %s: reverting to default description_template", course)
 
             for idx, item in enumerate(data.get("items") or []):
                 if not isinstance(item, dict):
@@ -126,9 +165,20 @@ class CourseRules:
                     cr.summary_regex = DEFAULT_SUMMARY_RE
 
             if "title_template" in data:
-                cr.title_template = str(data["title_template"])
+                tpl = str(data["title_template"])
+                allowed = {"kind", "n", "title", "course"}
+                if validate_template(tpl, allowed, "title_template", course):
+                    cr.title_template = tpl
+                else:
+                    safe_warn("Course %s: reverting to default title_template", course)
+
             if "description_template" in data:
-                cr.description_template = str(data["description_template"])
+                tpl = str(data["description_template"])
+                allowed = {"module", "canvas", "old_desc"}
+                if validate_template(tpl, allowed, "description_template", course):
+                    cr.description_template = tpl
+                else:
+                    safe_warn("Course %s: reverting to default description_template", course)
 
             def ingest(arr: Optional[list], dest: Dict[int, Dict[str, str]]) -> None:
                 for idx, item in enumerate(arr or []):

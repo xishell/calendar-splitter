@@ -316,3 +316,80 @@ def test_schema_b_full_parity_with_schema_a():
     assert 1 in cr.lectures
     assert 1 in cr.labs
     assert 1 in cr.exercises
+
+# ===== Template Validation Tests =====
+
+def test_validate_template_valid_title():
+    """Test valid title template is accepted."""
+    data = {
+        "course": "IS1200",
+        "title_template": "{kind} {n} - {title} - {course}",
+        "items": [],
+    }
+    cr = CourseRules.from_json(data)
+    assert cr.title_template == "{kind} {n} - {title} - {course}"
+
+def test_validate_template_invalid_variable_title():
+    """Test invalid variable in title template reverts to default."""
+    data = {
+        "course": "IS1200",
+        "title_template": "{kind} {n} - {invalid_var} - {course}",
+        "items": [],
+    }
+    cr = CourseRules.from_json(data)
+    # Should revert to default
+    assert cr.title_template == "{kind} {n} - {title} - {course}"
+
+def test_validate_template_valid_description():
+    """Test valid description template is accepted."""
+    data = {
+        "course": "IS1200",
+        "description_template": "{module}\n{canvas}\n{old_desc}",
+        "items": [],
+    }
+    cr = CourseRules.from_json(data)
+    assert cr.description_template == "{module}\n{canvas}\n{old_desc}"
+
+def test_validate_template_invalid_variable_description():
+    """Test invalid variable in description template reverts to default."""
+    data = {
+        "course": "IS1200",
+        "description_template": "{module}\n{invalid_var}\n{old_desc}",
+        "items": [],
+    }
+    cr = CourseRules.from_json(data)
+    # Should revert to default
+    assert cr.description_template == "{module}\nCanvas: {canvas}\n\n{old_desc}"
+
+def test_validate_template_syntax_error():
+    """Test template with syntax error reverts to default."""
+    data = {
+        "course": "IS1200",
+        "title_template": "{unclosed",
+        "items": [],
+    }
+    cr = CourseRules.from_json(data)
+    # Should revert to default
+    assert cr.title_template == "{kind} {n} - {title} - {course}"
+
+def test_validate_template_schema_b_invalid():
+    """Test Schema B template validation works."""
+    data = {
+        "course_code": "IS1200",
+        "title_template": "{kind} {n} - {bad_var}",
+        "lectures": [],
+    }
+    cr = CourseRules.from_json(data)
+    # Should revert to default
+    assert cr.title_template == "{kind} {n} - {title} - {course}"
+
+def test_validate_template_empty_braces():
+    """Test template with empty braces is valid (they're literal)."""
+    data = {
+        "course": "IS1200",
+        "title_template": "{kind} {n} - {title} - {} - {course}",
+        "items": [],
+    }
+    cr = CourseRules.from_json(data)
+    # Empty braces {} are literal text, should be accepted
+    assert cr.title_template == "{kind} {n} - {title} - {} - {course}"
