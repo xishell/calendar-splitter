@@ -27,16 +27,17 @@ git clone <repository-url>
 cd calendar-splitter
 ```
 
-2. Create virtual environment:
+2. Create virtual environment and install dependencies:
 
 ```bash
+# Using uv (recommended - much faster)
+uv venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+uv pip install -r requirements.txt
+
+# Or using traditional pip
 python -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
-```
-
-3. Install dependencies:
-
-```bash
 pip install -r requirements.txt
 ```
 
@@ -68,10 +69,15 @@ python -m scripts.main
 
 ### Course Rules
 
-Create JSON files in the `events/` directory to customize how courses are processed:
+Create JSON files in the `events/` directory to customize how courses are processed. Two schema formats are supported:
+
+#### Schema A (Legacy - Simple)
+
+Best for courses with only lectures:
 
 ```json
 {
+  "schema_version": "A",
   "course": "IS1200",
   "canvas": "https://canvas.kth.se/courses/56261",
   "match": {
@@ -85,21 +91,176 @@ Create JSON files in the `events/` directory to customize how courses are proces
       "number": 1,
       "title": "Course Introduction",
       "module": "Module 1: Programming Fundamentals"
+    },
+    {
+      "number": 2,
+      "title": "I/O Systems",
+      "module": "Module 2: Systems Programming"
     }
   ]
 }
 ```
 
-#### Rule Schema
+#### Schema B (Modern - Flexible)
 
-- **`course`**: Course code (e.g., "IS1200")
-- **`canvas`**: Canvas course URL (optional)
+Supports multiple event types (lectures, labs, seminars, etc.) with advanced matching:
+
+```json
+{
+  "schema_version": "B",
+  "course_code": "IS1200",
+  "canvas_url": "https://canvas.kth.se/courses/56261",
+  "match": {
+    "require_course_in_summary": true,
+    "summary_regex": "\\bFöreläsning\\s*(\\d+)\\b"
+  },
+  "title_template": "{kind} {n} - {title} - {course}",
+  "description_template": "{module}\nCanvas: {canvas}\n\n{old_desc}",
+  "event_types": [
+    {
+      "type": "lecture",
+      "display_name": "Föreläsning",
+      "patterns": ["Föreläsning\\s*(\\d+)", "Lecture\\s*(\\d+)"],
+      "unnumbered": false,
+      "items": [
+        {
+          "number": 1,
+          "title": "Course Introduction",
+          "module": "Module 1"
+        }
+      ]
+    },
+    {
+      "type": "seminar",
+      "display_name": "Seminarium",
+      "patterns": ["Seminarium\\s*(\\d+)", "Seminar\\s*(\\d+)"],
+      "items": [
+        {
+          "number": 1,
+          "title": "Systems Design Discussion",
+          "module": "Module 2",
+          "match_priority": [
+            {
+              "strategy": "time",
+              "priority": 1,
+              "timeslot": {
+                "day": "wednesday",
+                "start_time": "13:00",
+                "end_time": "15:00"
+              }
+            },
+            {
+              "strategy": "description",
+              "priority": 2,
+              "pattern": "Group A"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
+```
+
+#### Common Fields
+
+Both schemas support:
+
 - **`match`**: Event matching criteria
   - `require_course_in_summary`: Must contain "(COURSE)" in summary
-  - `summary_regex`: Custom regex for extracting lecture numbers
-- **`title_template`**: Template for event titles (supports `{n}`, `{title}`, `{course}`)
-- **`description_template`**: Template for descriptions (supports `{module}`, `{canvas}`, `{old_desc}`)
-- **`items`**: Array of lecture/lab/exercise definitions
+  - `summary_regex`: Custom regex for extracting event numbers (supports Swedish/English)
+- **`title_template`**: Template for event titles
+  - Variables: `{kind}`, `{n}`, `{title}`, `{course}`
+- **`description_template`**: Template for descriptions
+  - Variables: `{module}`, `{canvas}`, `{old_desc}`
+
+#### Schema B Specific Fields
+
+**Event Types Configuration:**
+
+- **`type`**: Internal identifier (e.g., "lecture", "seminar", "lab")
+- **`display_name`**: Displayed in event titles (e.g., "Föreläsning", "Seminarium")
+- **`patterns`**: Array of regex patterns to match this event type
+- **`unnumbered`**: Set to `true` for events without numbers (e.g., guest lectures)
+- **`items`**: Array of event definitions with flexible metadata
+
+**Advanced Matching Strategies:**
+
+Each item can specify `match_priority` (array of strategies) or single `match`:
+
+1. **Time-based matching** (filter duplicate seminars by timeslot):
+   ```json
+   {
+     "strategy": "time",
+     "priority": 1,
+     "timeslot": {
+       "day": "wednesday",
+       "start_time": "13:00",
+       "end_time": "15:00"
+     }
+   }
+   ```
+
+2. **Description pattern matching** (filter by group identifier):
+   ```json
+   {
+     "strategy": "description",
+     "priority": 2,
+     "pattern": "Group A|Grupp A"
+   }
+   ```
+
+3. **Location matching**:
+   ```json
+   {
+     "strategy": "location",
+     "priority": 3,
+     "location": "Room Q17"
+   }
+   ```
+
+4. **URL pattern matching**:
+   ```json
+   {
+     "strategy": "url",
+     "priority": 4,
+     "pattern": "zoom\\.us/j/12345"
+   }
+   ```
+
+5. **Composite strategies** (all must match):
+   ```json
+   {
+     "strategy": "all",
+     "strategies": [
+       {"strategy": "time", "timeslot": {...}},
+       {"strategy": "description", "pattern": "Group A"}
+     ]
+   }
+   ```
+
+**Legacy Schema B Format:**
+
+For backward compatibility, Schema B also supports simple arrays:
+
+```json
+{
+  "course_code": "IS1200",
+  "lectures": [
+    {"number": 1, "title": "Intro", "module": "M1"}
+  ],
+  "labs": [
+    {"number": 1, "title": "C Programming", "module": "M1"}
+  ],
+  "exercises": [
+    {"number": 1, "title": "Practice Problems", "module": "M1"}
+  ]
+}
+```
+
+#### Automatic Migration
+
+Legacy schemas are automatically migrated to the new event_types system internally. No manual conversion is required.
 
 ## Architecture
 
@@ -127,11 +288,14 @@ Create JSON files in the `events/` directory to customize how courses are proces
 ### Setup Development Environment
 
 ```bash
-# Install development dependencies
-pip install -r dev-requirements.txt
+# Install development dependencies (using uv - recommended)
+uv pip install -r requirements.txt -r dev-requirements.txt
+
+# Or using pip
+pip install -r requirements.txt -r dev-requirements.txt
 
 # Run tests
-pytest -v
+PYTHONPATH=. pytest -v
 
 # Run type checking
 mypy scripts
@@ -144,13 +308,13 @@ ruff check .
 
 ```bash
 # Basic test run
-pytest
+PYTHONPATH=. pytest
 
 # With coverage
-pytest --cov=scripts --cov-report=term-missing
+PYTHONPATH=. pytest --cov=scripts --cov-report=term-missing
 
 # Specific test file
-pytest tests/test_split.py -v
+PYTHONPATH=. pytest tests/test_split.py -v
 ```
 
 ### Code Quality

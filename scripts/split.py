@@ -1,12 +1,14 @@
 from __future__ import annotations
 
+from datetime import datetime
 from pathlib import Path
 from typing import Dict, cast
 
 from icalendar import Calendar, Event, vText
 
 from .log_sanitize import safe_log, safe_warn
-from .rewrite import clone_calendar_base, detect_course_code, rewrite_event
+from .rewrite import (clone_calendar_base, detect_course_code,
+                      extract_number_and_kind, matches_item, rewrite_event)
 from .rules import CourseRules
 from .tokens import ensure_token
 
@@ -17,11 +19,12 @@ def split_and_write(
     feeds_dir: Path,
     token_map: Dict[str, str],
 ) -> int:
-    cal = cast(Calendar, Calendar.from_ical(upstream_bytes.decode('utf-8')))
+    cal = cast(Calendar, Calendar.from_ical(upstream_bytes.decode("utf-8")))
 
     buckets: Dict[str, Calendar] = {}
     total = 0
     kept = 0
+    filtered = 0
 
     for comp in cal.walk():
         if comp.name != "VEVENT":
@@ -30,6 +33,13 @@ def split_and_write(
 
         summary = str(comp.get("SUMMARY", "") or "")
         description = str(comp.get("DESCRIPTION", "") or "")
+        location = str(comp.get("LOCATION", "") or "")
+        start_dt_raw = comp.get("DTSTART")
+        start_dt = None
+        if start_dt_raw:
+            dt_value = start_dt_raw.dt if hasattr(start_dt_raw, "dt") else start_dt_raw
+            if isinstance(dt_value, datetime):
+                start_dt = dt_value
         course = detect_course_code(summary, description)
         if not course:
             continue
@@ -44,6 +54,32 @@ def split_and_write(
             new_ev.add(k, v)
 
         cr = rules_by_course.get(course)
+
+        # Apply event filtering based on match strategies
+        should_skip = False
+        if cr and cr.event_types:
+            n, kind = extract_number_and_kind(summary, cr)
+            if n is not None and kind:
+                # Find the matching EventType
+                event_type = None
+                for et in cr.event_types:
+                    if et.type == kind:
+                        event_type = et
+                        break
+
+                if event_type:
+                    # Get the EventItem for this event
+                    item = event_type.items.get(n)
+                    if item and item.match_strategies:
+                        # Check if event matches the configured strategies
+                        if not matches_item(item, summary, description, location, start_dt):
+                            should_skip = True
+
+        # Skip events that don't match their filtering criteria
+        if should_skip:
+            filtered += 1
+            continue
+
         new_sum, new_desc = rewrite_event(summary, description, course, cr)
         new_ev.add("SUMMARY", vText(new_sum))
         new_ev.add("DESCRIPTION", vText(new_desc or ""))
@@ -51,7 +87,13 @@ def split_and_write(
         buckets[course].add_component(new_ev)
         kept += 1
 
-    safe_log("Parsed %d events; kept %d across %d courses.", total, kept, len(buckets))
+    safe_log(
+        "Parsed %d events; kept %d, filtered %d across %d courses.",
+        total,
+        kept,
+        filtered,
+        len(buckets),
+    )
 
     feeds_dir.mkdir(parents=True, exist_ok=True)
     written = 0
