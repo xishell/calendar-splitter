@@ -235,3 +235,84 @@ def test_schema_b_empty_course_code():
     }
     with pytest.raises(ValueError, match="Missing course_code"):
         CourseRules.from_json(data)
+
+# ===== Schema B Parity Tests =====
+
+def test_schema_b_custom_templates():
+    """Test Schema B supports custom title and description templates."""
+    data = {
+        "course_code": "IS1200",
+        "title_template": "{course} - {kind} {n}: {title}",
+        "description_template": "Module: {module}\n\n{old_desc}",
+        "lectures": [{"number": 1, "title": "Intro", "module": "M1"}],
+    }
+    cr = CourseRules.from_json(data)
+    assert cr.title_template == "{course} - {kind} {n}: {title}"
+    assert cr.description_template == "Module: {module}\n\n{old_desc}"
+
+def test_schema_b_require_course_in_summary():
+    """Test Schema B supports require_course_in_summary matching rule."""
+    data = {
+        "course_code": "IS1200",
+        "match": {
+            "require_course_in_summary": True
+        },
+        "lectures": [],
+    }
+    cr = CourseRules.from_json(data)
+    assert cr.require_course_in_summary is True
+
+def test_schema_b_custom_summary_regex():
+    """Test Schema B supports custom summary_regex."""
+    data = {
+        "course_code": "IS1200",
+        "match": {
+            "summary_regex": r"Föreläsning\s*(\d+)"  # Swedish pattern
+        },
+        "lectures": [],
+    }
+    cr = CourseRules.from_json(data)
+    assert cr.summary_regex is not None
+    assert cr.summary_regex.pattern == r"Föreläsning\s*(\d+)"
+
+def test_schema_b_invalid_regex_uses_default():
+    """Test Schema B falls back to default regex when invalid."""
+    data = {
+        "course_code": "IS1200",
+        "match": {
+            "summary_regex": r"[invalid(regex"  # Invalid regex
+        },
+        "lectures": [],
+    }
+    cr = CourseRules.from_json(data)
+    # Should fall back to DEFAULT_SUMMARY_RE
+    assert cr.summary_regex is not None
+    assert cr.summary_regex.pattern == r"\bLecture\s*(\d+)\b"
+
+def test_schema_b_full_parity_with_schema_a():
+    """Test Schema B has full feature parity with Schema A."""
+    data = {
+        "course_code": "IS1200",
+        "canvas_url": "https://canvas.kth.se/courses/56261",
+        "match": {
+            "require_course_in_summary": True,
+            "summary_regex": r"\bLecture\s*(\d+)\b",
+        },
+        "title_template": "Lecture {n} - {title} - {course}",
+        "description_template": "{module}\nCanvas: {canvas}\n\n{old_desc}",
+        "lectures": [{"number": 1, "title": "Intro", "module": "Module 1"}],
+        "labs": [{"number": 1, "title": "Lab 1", "module": "Lab Module"}],
+        "exercises": [{"number": 1, "title": "Ex 1", "module": "Exercise Module"}],
+    }
+    cr = CourseRules.from_json(data)
+
+    # Verify all features work
+    assert cr.course == "IS1200"
+    assert cr.canvas.endswith("/56261")
+    assert cr.require_course_in_summary is True
+    assert cr.summary_regex.pattern == r"\bLecture\s*(\d+)\b"
+    assert cr.title_template == "Lecture {n} - {title} - {course}"
+    assert cr.description_template == "{module}\nCanvas: {canvas}\n\n{old_desc}"
+    assert 1 in cr.lectures
+    assert 1 in cr.labs
+    assert 1 in cr.exercises

@@ -112,6 +112,24 @@ class CourseRules:
             cr = CourseRules(course)
             cr.canvas = (data.get("canvas_url") or "").strip() or None
 
+            # Schema B now supports same customization as Schema A
+            match = data.get("match") or {}
+            cr.require_course_in_summary = bool(
+                match.get("require_course_in_summary", False)
+            )
+            srx = match.get("summary_regex")
+            if srx:
+                try:
+                    cr.summary_regex = re.compile(srx, re.IGNORECASE)
+                except re.error:
+                    safe_warn("Course %s: invalid summary_regex, using default", course)
+                    cr.summary_regex = DEFAULT_SUMMARY_RE
+
+            if "title_template" in data:
+                cr.title_template = str(data["title_template"])
+            if "description_template" in data:
+                cr.description_template = str(data["description_template"])
+
             def ingest(arr: Optional[list], dest: Dict[int, Dict[str, str]]) -> None:
                 for idx, item in enumerate(arr or []):
                     if not isinstance(item, dict):
