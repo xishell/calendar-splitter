@@ -29,12 +29,15 @@ jobs:
           uv pip install --system -r requirements.txt -r dev-requirements.txt
 
       - name: Lint (ruff)
+        if: success() || failure()
         run: ruff check .
 
       - name: Type check (mypy)
+        if: success() || failure()
         run: mypy scripts
 
       - name: Test (pytest)
+        if: success() || failure()
         run: |
           # Add current directory to Python path for imports
           export PYTHONPATH="${PYTHONPATH:+${PYTHONPATH}:}$(pwd)"

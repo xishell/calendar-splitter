@@ -1,7 +1,5 @@
 import json
-import pytest
-from pathlib import Path
-from unittest.mock import Mock, patch, mock_open
+from unittest.mock import Mock, patch
 from scripts.fetch import fetch_upstream_if_changed, _sha256_bytes, _read_state, _write_state
 
 
