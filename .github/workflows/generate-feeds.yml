@@ -20,6 +20,8 @@ env:
 jobs:
   build:
     runs-on: ubuntu-latest
+    # Only run feed generation on main branch
+    if: github.ref == 'refs/heads/main'
 
     steps:
       - name: Checkout public repo (site)
@@ -45,15 +47,11 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Cache pip
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
-          restore-keys: ${{ runner.os }}-pip-
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
 
       - name: Install deps
-        run: pip install -r requirements.txt
+        run: uv pip install --system -r requirements.txt
 
       - name: Ensure site folders
         run: |

@@ -80,7 +80,7 @@ class CourseRules:
                     )
                     continue
                 try:
-                    n = int(item.get("number"))
+                    n = int(item.get("number"))  # type: ignore[arg-type]
                 except (ValueError, TypeError):
                     safe_warn(
                         "Course %s: items[%d] has invalid 'number' field (%s), skipping",
@@ -123,7 +123,7 @@ class CourseRules:
                         continue
 
                     try:
-                        n = int(item.get("number"))
+                        n = int(item.get("number"))  # type: ignore[arg-type]
                     except (ValueError, TypeError):
                         safe_warn(
                             "Course %s: items[%d] has invalid 'number' field (%s), skipping",

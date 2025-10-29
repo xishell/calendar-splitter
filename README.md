@@ -27,16 +27,17 @@ git clone <repository-url>
 cd calendar-splitter
 ```
 
-2. Create virtual environment:
+2. Create virtual environment and install dependencies:
 
 ```bash
+# Using uv (recommended - much faster)
+uv venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+uv pip install -r requirements.txt
+
+# Or using traditional pip
 python -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
-```
-
-3. Install dependencies:
-
-```bash
 pip install -r requirements.txt
 ```
 
@@ -127,11 +128,14 @@ Create JSON files in the `events/` directory to customize how courses are proces
 ### Setup Development Environment
 
 ```bash
-# Install development dependencies
-pip install -r dev-requirements.txt
+# Install development dependencies (using uv - recommended)
+uv pip install -r requirements.txt -r dev-requirements.txt
+
+# Or using pip
+pip install -r requirements.txt -r dev-requirements.txt
 
 # Run tests
-pytest -v
+PYTHONPATH=. pytest -v
 
 # Run type checking
 mypy scripts
@@ -144,13 +148,13 @@ ruff check .
 
 ```bash
 # Basic test run
-pytest
+PYTHONPATH=. pytest
 
 # With coverage
-pytest --cov=scripts --cov-report=term-missing
+PYTHONPATH=. pytest --cov=scripts --cov-report=term-missing
 
 # Specific test file
-pytest tests/test_split.py -v
+PYTHONPATH=. pytest tests/test_split.py -v
 ```
 
 ### Code Quality
