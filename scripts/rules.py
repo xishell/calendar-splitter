@@ -11,6 +11,31 @@ from .log_sanitize import safe_log, safe_warn
 DEFAULT_SUMMARY_RE = re.compile(r"\bLecture\s*(\d+)\b", re.IGNORECASE)
 
 
+def detect_schema(data: dict[str, Any]) -> str:
+    """Detect which schema version is used. Returns 'A' or 'B'."""
+    if "schema_version" in data:
+        version = data["schema_version"]
+        if version in ("A", "a", "1"):
+            return "A"
+        elif version in ("B", "b", "2"):
+            return "B"
+        else:
+            safe_warn("Unknown schema_version '%s', attempting auto-detect", version)
+    has_course = "course" in data
+    has_course_code = "course_code" in data
+    has_items = "items" in data
+    has_lectures = "lectures" in data or "labs" in data or "exercises" in data
+    if has_course and not has_course_code:
+        return "A"
+    elif has_course_code and not has_course:
+        return "B"
+    elif has_course and has_course_code:
+        safe_warn("Found both 'course' and 'course_code', treating as Schema A")
+        return "A"
+    else:
+        raise ValueError("Cannot determine schema: missing 'course' or 'course_code'")
+
+
 @dataclass
 class CourseRules:
     course: str
@@ -25,14 +50,17 @@ class CourseRules:
 
     @staticmethod
     def from_json(data: Dict[str, Any]) -> "CourseRules":
+        schema = detect_schema(data)
         # Schema A
-        if "course" in data:
+        if schema == "A":
             course = str(data["course"]).strip()
             cr = CourseRules(course)
             cr.canvas = (data.get("canvas") or "").strip() or None
 
             match = data.get("match") or {}
-            cr.require_course_in_summary = bool(match.get("require_course_in_summary", False))
+            cr.require_course_in_summary = bool(
+                match.get("require_course_in_summary", False)
+            )
             srx = match.get("summary_regex")
             if srx:
                 try:
@@ -45,45 +73,98 @@ class CourseRules:
             if "description_template" in data:
                 cr.description_template = str(data["description_template"])
 
-            for item in (data.get("items") or []):
+            for idx, item in enumerate(data.get("items") or []):
+                if not isinstance(item, dict):
+                    safe_warn(
+                        "Course %s: items[%d] is not a dict, skipping", course, idx
+                    )
+                    continue
                 try:
                     n = int(item.get("number"))
-                except Exception:
+                except (ValueError, TypeError):
+                    safe_warn(
+                        "Course %s: items[%d] has invalid 'number' field (%s), skipping",
+                        course,
+                        idx,
+                        item.get("number"),
+                    )
                     continue
+                if n <= 0:
+                    safe_warn(
+                        "Course %s: items[%d] has non-positive number (%d), skipping",
+                        course,
+                        idx,
+                        n,
+                    )
+                    continue
+                if n in cr.lectures:
+                    safe_warn(
+                        "Course %s: duplicate number %d found, overwriting", course, n
+                    )
+
                 cr.lectures[n] = {
                     "title": str(item.get("title", "")).strip(),
                     "module": str(item.get("module", "")).strip(),
                 }
             return cr
+        else:
+            course = str(data.get("course_code", "")).strip()
+            if not course:
+                raise ValueError("Missing course_code")
+            cr = CourseRules(course)
+            cr.canvas = (data.get("canvas_url") or "").strip() or None
 
-        # Schema B
-        course = str(data.get("course_code", "")).strip()
-        if not course:
-            raise ValueError("Missing course/course_code")
-        cr = CourseRules(course)
-        cr.canvas = (data.get("canvas_url") or "").strip() or None
+            def ingest(arr: Optional[list], dest: Dict[int, Dict[str, str]]) -> None:
+                for idx, item in enumerate(arr or []):
+                    if not isinstance(item, dict):
+                        safe_warn(
+                            "Course %s: items[%d] is not a dict, skipping", course, idx
+                        )
+                        continue
 
-        def ingest(arr: Optional[list], dest: Dict[int, Dict[str, str]]) -> None:
-            for item in (arr or []):
-                try:
-                    n = int(item.get("number"))
-                except Exception:
-                    continue
-                dest[n] = {
-                    "title": str(item.get("title", "")).strip(),
-                    "module": str(item.get("module", "")).strip(),
-                }
+                    try:
+                        n = int(item.get("number"))
+                    except (ValueError, TypeError):
+                        safe_warn(
+                            "Course %s: items[%d] has invalid 'number' field (%s), skipping",
+                            course,
+                            idx,
+                            item.get("number"),
+                        )
+                        continue
+                    if n <= 0:
+                        safe_warn(
+                            "Course %s: items[%d] has non-positive number (%d), skipping",
+                            course,
+                            idx,
+                            n,
+                        )
+                        continue
+                    if n in dest:
+                        safe_warn(
+                            "Course %s: duplicate number %d found, overwriting",
+                            course,
+                            n,
+                        )
 
-        ingest(data.get("lectures"), cr.lectures)
-        ingest(data.get("labs"), cr.labs)
-        ingest(data.get("exercises"), cr.exercises)
-        return cr
+                    dest[n] = {
+                        "title": str(item.get("title", "")).strip(),
+                        "module": str(item.get("module", "")).strip(),
+                    }
+
+            ingest(data.get("lectures"), cr.lectures)
+            ingest(data.get("labs"), cr.labs)
+            ingest(data.get("exercises"), cr.exercises)
+            return cr
 
 
 def load_course_rules_dir(events_dir: Path) -> Dict[str, CourseRules]:
     rules: Dict[str, CourseRules] = {}
     if not events_dir.exists():
-        safe_warn("EVENTS_DIR does not exist: %s (no rewriting will be applied).", str(events_dir))
+        safe_warn(
+            "EVENTS_DIR does not exist: %s (no rewriting will be applied).",
+            str(events_dir),
+        )
         return rules
     for p in sorted(events_dir.glob("*.json")):
         try:
