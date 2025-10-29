@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
+from zoneinfo import ZoneInfo
 
 from icalendar import Calendar, vText
 
@@ -118,7 +119,14 @@ def extract_number_and_kind(summary: str, cr: Optional[CourseRules]) -> Tuple[Op
     return None, None
 
 
-def rewrite_event(summary: str, description: str, course: str, cr: Optional[CourseRules]) -> Tuple[str, str]:
+def rewrite_event(
+    summary: str,
+    description: str,
+    course: str,
+    cr: Optional[CourseRules],
+    override_n: Optional[int] = None,
+    override_kind: Optional[str] = None
+) -> Tuple[str, str]:
     """Rewrite event summary and description based on course rules.
 
     Supports both new EventType system and legacy lecture/lab/exercise dictionaries.
@@ -128,6 +136,8 @@ def rewrite_event(summary: str, description: str, course: str, cr: Optional[Cour
         description: Original event description
         course: Course code
         cr: Course rules (optional)
+        override_n: Override event number (for unnumbered events matched by time)
+        override_kind: Override event kind (for unnumbered events matched by time)
 
     Returns:
         Tuple of (new_summary, new_description)
@@ -139,7 +149,11 @@ def rewrite_event(summary: str, description: str, course: str, cr: Optional[Cour
     if cr.require_course_in_summary and f"({course})" not in (summary or ""):
         return summary, description or ""
 
-    n, kind = extract_number_and_kind(summary, cr)
+    # Use overrides if provided, otherwise extract from summary
+    if override_n is not None or override_kind is not None:
+        n, kind = override_n, override_kind
+    else:
+        n, kind = extract_number_and_kind(summary, cr)
     title = None
     module = None
     metadata: Dict[str, Any] = {}
@@ -284,8 +298,15 @@ def matches_strategy(
             start_h, start_m = parse_time(start_time)
             end_h, end_m = parse_time(end_time)
 
-            event_h = start_dt.hour
-            event_m = start_dt.minute
+            # Convert UTC time to Stockholm local time for comparison
+            # Config times are assumed to be in Europe/Stockholm timezone
+            local_dt = start_dt
+            if start_dt.tzinfo is not None:
+                # Convert to Stockholm time
+                local_dt = start_dt.astimezone(ZoneInfo("Europe/Stockholm"))
+
+            event_h = local_dt.hour
+            event_m = local_dt.minute
 
             # Check if event time is in range
             event_minutes = event_h * 60 + event_m

@@ -98,3 +98,4 @@ docs/feeds/
 logs/
 
 events/
+*.ics

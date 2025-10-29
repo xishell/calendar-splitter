@@ -57,30 +57,51 @@ def split_and_write(
 
         # Apply event filtering based on match strategies
         should_skip = False
+        matched_item = None
+        n = None
+        kind = None
         if cr and cr.event_types:
             n, kind = extract_number_and_kind(summary, cr)
-            if n is not None and kind:
-                # Find the matching EventType
-                event_type = None
+
+            # Find the matching EventType
+            event_type = None
+            if kind:
                 for et in cr.event_types:
                     if et.type == kind:
                         event_type = et
                         break
 
-                if event_type:
-                    # Get the EventItem for this event
+            if event_type and event_type.items:
+                if n is not None:
+                    # Numbered event - direct lookup
                     item = event_type.items.get(n)
                     if item and item.match_strategies:
                         # Check if event matches the configured strategies
                         if not matches_item(item, summary, description, location, start_dt):
                             should_skip = True
+                        else:
+                            matched_item = item
+                else:
+                    # Unnumbered event - try matching against all items
+                    # Find the first item that matches
+                    for item_num, item in event_type.items.items():
+                        if item.match_strategies:
+                            if matches_item(item, summary, description, location, start_dt):
+                                matched_item = item
+                                n = item_num  # Assign the matched item's number
+                                break
+
+                    # If we have items with match strategies but no match, skip this event
+                    if matched_item is None and any(item.match_strategies for item in event_type.items.values()):
+                        should_skip = True
 
         # Skip events that don't match their filtering criteria
         if should_skip:
             filtered += 1
             continue
 
-        new_sum, new_desc = rewrite_event(summary, description, course, cr)
+        # For unnumbered events, pass the matched number and kind for proper rewriting
+        new_sum, new_desc = rewrite_event(summary, description, course, cr, n, kind)
         new_ev.add("SUMMARY", vText(new_sum))
         new_ev.add("DESCRIPTION", vText(new_desc or ""))
 
