@@ -23,8 +23,6 @@ def detect_schema(data: dict[str, Any]) -> str:
             safe_warn("Unknown schema_version '%s', attempting auto-detect", version)
     has_course = "course" in data
     has_course_code = "course_code" in data
-    has_items = "items" in data
-    has_lectures = "lectures" in data or "labs" in data or "exercises" in data
     if has_course and not has_course_code:
         return "A"
     elif has_course_code and not has_course:
