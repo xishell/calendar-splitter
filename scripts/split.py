@@ -49,7 +49,7 @@ def split_and_write(
 
         new_ev = Event()
         for k, v in comp.property_items():
-            if k in ("SUMMARY", "DESCRIPTION"):
+            if k in ("SUMMARY", "DESCRIPTION", "BEGIN", "END"):
                 continue
             new_ev.add(k, v)
 

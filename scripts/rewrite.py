@@ -181,10 +181,11 @@ def rewrite_event(summary: str, description: str, course: str, cr: Optional[Cour
 
     # SUMMARY
     new_summary = summary
-    if title and n is not None:
+    # Rewrite summary if we detected an event type
+    if kind:
         tpl = cr.title_template or "{kind} {n} - {title} - {course}"
         # Get display name from EventType or use default
-        if kind and cr.event_types:
+        if cr.event_types:
             for et in cr.event_types:
                 if et.type == kind:
                     prefix = et.display_name
@@ -194,7 +195,22 @@ def rewrite_event(summary: str, description: str, course: str, cr: Optional[Cour
         else:
             prefix = "Lecture" if kind == "lecture" else ("Lab" if kind == "lab" else "Exercise")
 
-        new_summary = tpl.format(kind=prefix, n=n, title=title, course=course)
+        # Only rewrite if template can be satisfied with available data
+        # For unnumbered events without titles, ensure template doesn't require {n} or {title}
+        if title and n is not None:
+            # Numbered event with title - use template as-is
+            new_summary = tpl.format(kind=prefix, n=n, title=title, course=course)
+        elif n is None and title is None:
+            # Unnumbered event without title - only format if template supports it
+            # Try to format with empty/None values
+            try:
+                new_summary = tpl.format(kind=prefix, n="", title="", course=course).strip()
+                # Clean up any artifacts like " -  - " or multiple spaces
+                new_summary = re.sub(r'\s*-\s*-\s*', ' - ', new_summary)
+                new_summary = re.sub(r'\s+', ' ', new_summary).strip()
+            except (KeyError, ValueError):
+                # Template requires fields we don't have, skip rewriting
+                pass
 
     # DESCRIPTION
     if (description or "").strip():
