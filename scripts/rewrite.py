@@ -7,8 +7,17 @@ from icalendar import Calendar, vText
 
 from .rules import CourseRules
 
-# Detect course by "(IS1200)" in summary or KTH course URL in description
-RE_COURSE_IN_SUMMARY = re.compile(r"\(([A-Z0-9\-]{4,})\)")
+# Detect course codes with improved patterns to reduce false positives
+
+# KTH-style: 2 letters + 4 digits (IS1200, DD1351, SF1922)
+# More specific - avoids matching pure numbers like "(2024)"
+RE_COURSE_KTH_STYLE = re.compile(r"\b([A-Z]{2}\d{4})\b")
+
+# Generic: in parentheses, starts with 2+ letters, contains at least 1 digit
+# Filters out "(2024)", "(HTML)", "(PDF)" but matches "(IS1200HT)", "(CS101)"
+RE_COURSE_PARENS = re.compile(r"\(([A-Z]{2,}[A-Z0-9]*\d[A-Z0-9]*)\)")
+
+# URL pattern unchanged
 RE_KTH_COURSE_URL = re.compile(r"/course/([A-Z0-9\-]{4,})/")
 
 DEFAULT_SUMMARY_RE = re.compile(r"\bLecture\s*(\d+)\b", re.IGNORECASE)
@@ -17,12 +26,28 @@ RE_EXERCISE = re.compile(r"\bExercise\s+(\d+)\b", re.IGNORECASE)
 
 
 def detect_course_code(summary: str, description: str) -> Optional[str]:
-    m = RE_COURSE_IN_SUMMARY.search(summary or "")
+    """Detect course code from summary or description.
+
+    Tries patterns in order of specificity to avoid false positives:
+    1. KTH-style (2 letters + 4 digits) anywhere in summary
+    2. Parentheses pattern (starts with 2+ letters)
+    3. Course URL pattern in description
+    """
+    # Try KTH-style first (most specific, highest confidence)
+    m = RE_COURSE_KTH_STYLE.search(summary or "")
     if m:
         return m.group(1)
+
+    # Try parentheses pattern (medium specificity)
+    m = RE_COURSE_PARENS.search(summary or "")
+    if m:
+        return m.group(1)
+
+    # Try URL pattern in description (fallback)
     m = RE_KTH_COURSE_URL.search(description or "")
     if m:
         return m.group(1)
+
     return None
 
 
