@@ -64,6 +64,13 @@ jobs:
           LOG_LEVEL: INFO
         run: python -m calendar_splitter
 
+      - name: Update README
+        env:
+          TOKEN_MAP_PATH: ${{ env.TOKEN_MAP_PATH }}
+          BASE_URL: https://cal.steffensens.io/feeds
+          README_DIR: _feeds
+        run: python -m calendar_splitter --generate-readme
+
       - name: Commit & push to feeds repo
         working-directory: _feeds
         run: |
@@ -77,5 +84,6 @@ jobs:
           git add docs/.nojekyll || true
           git add token_map.json || true
           git add upstream_state.json || true
-          git commit -m "Update tokenized feeds and state"
+          git add README.md || true
+          git commit -m "Update feeds and README"
           git push
