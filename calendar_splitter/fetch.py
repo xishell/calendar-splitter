@@ -76,21 +76,8 @@ def _fetch_local(
 def _fetch_http(
     url: str, state_path: Path, state: dict[str, Any], timeout: int
 ) -> bytes | None:
-    session = requests.Session()
-    session.headers.update({"User-Agent": "CalendarSplitter/3.0"})
-
-    # Probe for caching headers
-    etag_curr = None
-    lm_curr = None
-    try:
-        head = session.head(url, allow_redirects=True, timeout=timeout)
-        etag_curr = head.headers.get("ETag")
-        lm_curr = head.headers.get("Last-Modified")
-    except requests.RequestException as exc:
-        _log.warning("HEAD failed, will GET with conditionals: %s", redact(str(exc)))
-
-    # Conditional GET
-    headers: dict[str, str] = {}
+    # Conditional GET using cached headers from previous run
+    headers: dict[str, str] = {"User-Agent": "CalendarSplitter/3.0"}
     etag_prev = state.get("etag")
     lm_prev = state.get("last_modified")
     if etag_prev:
@@ -99,7 +86,7 @@ def _fetch_http(
         headers["If-Modified-Since"] = lm_prev
 
     try:
-        res = session.get(url, allow_redirects=True, headers=headers, timeout=timeout)
+        res = requests.get(url, allow_redirects=True, headers=headers, timeout=timeout)
     except requests.RequestException as exc:
         msg = f"GET failed: {exc}"
         raise FetchError(msg) from exc
@@ -118,8 +105,8 @@ def _fetch_http(
         _log.info("Upstream content hash unchanged; skipping.")
         return None
 
-    etag_used = etag_curr or res.headers.get("ETag")
-    lm_used = lm_curr or res.headers.get("Last-Modified")
+    etag_used = res.headers.get("ETag")
+    lm_used = res.headers.get("Last-Modified")
 
     new_state: dict[str, Any] = {"mode": "http", "sha256": new_hash, "updated_at": int(time.time())}
     if etag_used:

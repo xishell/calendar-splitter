@@ -54,52 +54,65 @@ class TestFetchLocal:
 
 
 class TestFetchHTTP:
-    @patch("calendar_splitter.fetch.requests.Session")
-    def test_successful_fetch(self, mock_session_cls, tmp_path):
-        session = MagicMock()
-        mock_session_cls.return_value = session
-
-        head_resp = MagicMock()
-        head_resp.headers = {"ETag": '"abc"', "Last-Modified": "Mon, 01 Jan 2025"}
-        session.head.return_value = head_resp
-
-        get_resp = MagicMock()
-        get_resp.status_code = 200
-        get_resp.content = b"calendar data"
-        get_resp.headers = {"ETag": '"abc"'}
-        session.get.return_value = get_resp
+    @patch("calendar_splitter.fetch.requests.get")
+    def test_successful_fetch(self, mock_get, tmp_path):
+        resp = MagicMock()
+        resp.status_code = 200
+        resp.content = b"calendar data"
+        resp.headers = {"ETag": '"abc"', "Last-Modified": "Mon, 01 Jan 2025"}
+        mock_get.return_value = resp
 
         state_path = tmp_path / "state.json"
         result = fetch_upstream("https://example.com/cal.ics", tmp_path / "f.ics", state_path)
         assert result == b"calendar data"
 
-    @patch("calendar_splitter.fetch.requests.Session")
-    def test_304_returns_none(self, mock_session_cls, tmp_path):
-        session = MagicMock()
-        mock_session_cls.return_value = session
-
-        session.head.return_value = MagicMock(headers={})
-
-        get_resp = MagicMock()
-        get_resp.status_code = 304
-        session.get.return_value = get_resp
+    @patch("calendar_splitter.fetch.requests.get")
+    def test_304_returns_none(self, mock_get, tmp_path):
+        resp = MagicMock()
+        resp.status_code = 304
+        mock_get.return_value = resp
 
         state_path = tmp_path / "state.json"
         state_path.write_text(json.dumps({"etag": '"old"'}), encoding="utf-8")
         result = fetch_upstream("https://example.com/cal.ics", tmp_path / "f.ics", state_path)
         assert result is None
 
-    @patch("calendar_splitter.fetch.requests.Session")
-    def test_error_status_raises(self, mock_session_cls, tmp_path):
-        session = MagicMock()
-        mock_session_cls.return_value = session
-        session.head.return_value = MagicMock(headers={})
-
-        get_resp = MagicMock()
-        get_resp.status_code = 500
-        get_resp.content = b""
-        session.get.return_value = get_resp
+    @patch("calendar_splitter.fetch.requests.get")
+    def test_error_status_raises(self, mock_get, tmp_path):
+        resp = MagicMock()
+        resp.status_code = 500
+        resp.content = b""
+        mock_get.return_value = resp
 
         state_path = tmp_path / "state.json"
         with pytest.raises(FetchError, match="500"):
             fetch_upstream("https://example.com/cal.ics", tmp_path / "f.ics", state_path)
+
+    @patch("calendar_splitter.fetch.requests.get")
+    def test_sends_etag_conditional(self, mock_get, tmp_path):
+        resp = MagicMock()
+        resp.status_code = 304
+        mock_get.return_value = resp
+
+        state_path = tmp_path / "state.json"
+        state_path.write_text(json.dumps({"etag": '"xyz"'}), encoding="utf-8")
+        fetch_upstream("https://example.com/cal.ics", tmp_path / "f.ics", state_path)
+
+        _, kwargs = mock_get.call_args
+        assert kwargs["headers"]["If-None-Match"] == '"xyz"'
+
+    @patch("calendar_splitter.fetch.requests.get")
+    def test_sha256_dedup(self, mock_get, tmp_path):
+        resp = MagicMock()
+        resp.status_code = 200
+        resp.content = b"same content"
+        resp.headers = {}
+        mock_get.return_value = resp
+
+        state_path = tmp_path / "state.json"
+        # First fetch
+        result1 = fetch_upstream("https://example.com/cal.ics", tmp_path / "f.ics", state_path)
+        assert result1 == b"same content"
+        # Second fetch — same hash
+        result2 = fetch_upstream("https://example.com/cal.ics", tmp_path / "f.ics", state_path)
+        assert result2 is None
