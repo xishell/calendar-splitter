@@ -59,6 +59,8 @@ ignore = [
   "PLR2004", # Magic value comparisons OK in tests
   "S101",    # Assert use is OK in tests
 ]
+"calendar_splitter/core/writer.py" = ["ANN401"]  # icalendar types are untyped
+"calendar_splitter/core/parser.py" = ["ANN401"]  # icalendar types are untyped
 
 # MyPy configuration - type checking
 [tool.mypy]

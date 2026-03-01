@@ -1,0 +1,81 @@
+name: Generate tokenized calendar feeds
+
+on:
+  workflow_dispatch: {}
+  schedule:
+    # 06:00 Europe/Stockholm ≈ 04:00 UTC
+    - cron: '0 4 * * *'
+
+permissions:
+  contents: write
+
+env:
+  FEEDS_DIR: _feeds/docs/feeds
+  COURSES_DIR: _feeds/events
+  TOKEN_MAP_PATH: _feeds/token_map.json
+  UPSTREAM_STATE_PATH: _feeds/upstream_state.json
+  PYTHONUNBUFFERED: '1'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Checkout calendar-splitter
+        uses: actions/checkout@v4
+
+      - name: Checkout cal.steffensens.io
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ secrets.FEEDS_REPO }}
+          token: ${{ secrets.FEEDS_REPO_TOKEN }}
+          path: _feeds
+
+      - name: Mask secrets in logs
+        run: |
+          echo "::add-mask::${{ secrets.SOURCE_ICS_URL }}"
+          echo "::add-mask::${{ secrets.FEEDS_REPO_TOKEN }}"
+          echo "::add-mask::${{ secrets.FEEDS_REPO }}"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Install calendar-splitter
+        run: uv pip install --system -e .
+
+      - name: Ensure site folders
+        run: |
+          mkdir -p _feeds/docs/feeds
+          touch _feeds/docs/.nojekyll
+
+      - name: Generate feeds
+        env:
+          SOURCE_ICS_URL: ${{ secrets.SOURCE_ICS_URL }}
+          COURSES_DIR: ${{ env.COURSES_DIR }}
+          TOKEN_MAP_PATH: ${{ env.TOKEN_MAP_PATH }}
+          UPSTREAM_STATE_PATH: ${{ env.UPSTREAM_STATE_PATH }}
+          FEEDS_DIR: ${{ env.FEEDS_DIR }}
+          LOG_LEVEL: INFO
+        run: python -m calendar_splitter
+
+      - name: Commit & push to feeds repo
+        working-directory: _feeds
+        run: |
+          if git diff --quiet && [ -z "$(git ls-files --others --exclude-standard)" ]; then
+            echo "No changes to commit."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/feeds/*.ics || true
+          git add docs/.nojekyll || true
+          git add token_map.json || true
+          git add upstream_state.json || true
+          git commit -m "Update tokenized feeds and state"
+          git push
