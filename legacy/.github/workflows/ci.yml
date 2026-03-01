@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, v2 ]
   pull_request:
 
 permissions:
@@ -25,16 +25,20 @@ jobs:
         uses: astral-sh/setup-uv@v5
 
       - name: Install dependencies
-        run: uv pip install --system -e ".[dev]"
+        run: |
+          uv pip install --system -r requirements.txt -r dev-requirements.txt
 
       - name: Lint (ruff)
         if: success() || failure()
-        run: ruff check calendar_splitter/
+        run: ruff check .
 
       - name: Type check (mypy)
         if: success() || failure()
-        run: mypy calendar_splitter/
+        run: mypy scripts
 
       - name: Test (pytest)
         if: success() || failure()
-        run: pytest tests/ -v
+        run: |
+          # Add current directory to Python path for imports
+          export PYTHONPATH="${PYTHONPATH:+${PYTHONPATH}:}$(pwd)"
+          pytest -q --cov=scripts --cov-report=term-missing
