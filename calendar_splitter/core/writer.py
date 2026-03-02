@@ -27,8 +27,20 @@ def build_event(
     """Build an icalendar Event with rewritten summary/description and passthrough properties."""
     ev: Any = Event()  # type: ignore[no-untyped-call]
 
+    src = classified.event
+
+    # Add core properties that were parsed into separate fields
+    if src.uid:
+        ev.add("UID", src.uid)
+    if src.start is not None:
+        ev.add("DTSTART", src.start)
+    if src.end is not None:
+        ev.add("DTEND", src.end)
+    if src.location:
+        ev.add("LOCATION", vText(src.location))
+
     # Add passthrough properties from original
-    for key, value in classified.event.properties.items():
+    for key, value in src.properties.items():
         ev.add(key, value)
 
     ev.add("SUMMARY", vText(new_summary))
