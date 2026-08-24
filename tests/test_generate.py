@@ -274,3 +274,43 @@ def test_travel_defaults_to_zero(tmp_path):
     busy = []
     slots = generate_feed(spec, busy)
     assert busy[0] == (slots[0].start, slots[0].end)
+
+
+def _fb(**over):
+    rule = {"kind": "recurring", "summary": "Lift", "from": "2026-09-07", "until": "2026-09-11",
+            "days": ["mon", "tue", "wed", "thu", "fri"],
+            "window": ["07:00", "11:00"], "fallback_window": ["16:00", "21:00"],
+            "duration_min": 75, "per_week": 4}
+    rule.update(over)
+    return rule
+
+
+def test_fallback_is_untouched_while_the_preferred_window_fits(tmp_path):
+    spec = _spec(tmp_path, {"feed": "G", "rules": [_fb()]})[0]
+    slots = generate_feed(spec, [])
+    assert len(slots) == 4
+    assert all(s.start.hour < 12 for s in slots)
+
+
+def test_fallback_catches_sessions_the_preferred_window_cannot_fit(tmp_path):
+    spec = _spec(tmp_path, {"feed": "G", "rules": [_fb()]})[0]
+    busy = [(_at(d, 6), _at(d, 12)) for d in (7, 8, 9, 10, 11)]
+    slots = generate_feed(spec, busy)
+    assert len(slots) == 4
+    assert all(s.start.hour >= 16 for s in slots)
+
+
+def test_preferred_window_is_exhausted_across_all_days_before_the_fallback(tmp_path):
+    """Two blocked mornings must not push the whole week to evenings."""
+    spec = _spec(tmp_path, {"feed": "G", "rules": [_fb()]})[0]
+    busy = [(_at(d, 6), _at(d, 12)) for d in (7, 8)]
+    slots = generate_feed(spec, busy)
+    assert len(slots) == 4
+    assert sum(1 for s in slots if s.start.hour < 12) == 3   # wed, thu, fri mornings
+    assert sum(1 for s in slots if s.start.hour >= 16) == 1  # only the shortfall
+
+
+def test_without_a_fallback_a_blocked_window_drops_the_session(tmp_path):
+    spec = _spec(tmp_path, {"feed": "G", "rules": [_fb(fallback_window=None)]})[0]
+    busy = [(_at(d, 6), _at(d, 12)) for d in (7, 8, 9, 10, 11)]
+    assert generate_feed(spec, busy) == []

@@ -57,6 +57,8 @@ class Rule:
     until: str = ""
     days: list[str] = field(default_factory=list)
     window: tuple[str, str] = ("09:00", "17:00")
+    # tried only for sessions the preferred window could not fit
+    fallback_window: tuple[str, str] | None = None
     duration_min: int = 60
     per_week: int = 1
     rotate: list[str] = field(default_factory=list)
@@ -110,6 +112,7 @@ def _parse_rule(raw: dict[str, Any], where: str) -> Rule:
         until=raw.get("until", ""),
         days=days,
         window=(window[0], window[1]),
+        fallback_window=(fb[0], fb[1]) if (fb := raw.get("fallback_window")) else None,
         duration_min=int(raw.get("duration_min", 60)),
         per_week=int(raw.get("per_week", 1)),
         rotate=list(raw.get("rotate", [])),
@@ -183,52 +186,61 @@ def _weeks(since: date, until: date) -> list[date]:
     return out
 
 
+def _place_one(
+    rule: Rule, day: date, win: tuple[str, str],
+    ctx: tuple[ZoneInfo, list[tuple[datetime, datetime]], str],
+) -> Slot | None:
+    """First free slot for one day inside one window, or None."""
+    tz, busy, label = ctx
+    duration = timedelta(minutes=rule.duration_min)
+    travel = timedelta(minutes=rule.travel_min)
+    cursor = datetime.combine(day, time.fromisoformat(win[0]), tzinfo=tz)
+    latest = datetime.combine(day, time.fromisoformat(win[1]), tzinfo=tz) - duration
+    while cursor <= latest:
+        finish = cursor + duration
+        if not (rule.avoid_conflicts and _overlaps(cursor - travel, finish + travel, busy)):
+            busy.append((cursor - travel, finish + travel))
+            return Slot(
+                summary=rule.summary.replace("{rotate}", label),
+                description=rule.description.replace("{rotate}", label),
+                start=cursor,
+                end=finish,
+                location=rule.location,
+            )
+        cursor += _STEP
+    return None
+
+
 def _expand_recurring(
     rule: Rule, tz: ZoneInfo, busy: list[tuple[datetime, datetime]]
 ) -> list[Slot]:
     since = date.fromisoformat(rule.since)
     until = date.fromisoformat(rule.until)
-    w_start = time.fromisoformat(rule.window[0])
-    w_end = time.fromisoformat(rule.window[1])
-    duration = timedelta(minutes=rule.duration_min)
 
     slots: list[Slot] = []
     rotation = 0
 
     for monday in _weeks(since, until):
+        days = [monday + timedelta(days=_WEEKDAYS[d]) for d in rule.days]
+        days = [d for d in days if since <= d <= until]
         placed = 0
-        for day_name in rule.days:
-            if placed >= rule.per_week:
-                break
-            day = monday + timedelta(days=_WEEKDAYS[day_name])
-            if day < since or day > until:
-                continue
 
-            latest = datetime.combine(day, w_end, tzinfo=tz) - duration
-            cursor = datetime.combine(day, w_start, tzinfo=tz)
-            travel = timedelta(minutes=rule.travel_min)
-            while cursor <= latest:
-                finish = cursor + duration
-                if not (rule.avoid_conflicts and _overlaps(cursor - travel, finish + travel, busy)):
-                    label = rule.rotate[rotation % len(rule.rotate)] if rule.rotate else ""
-                    slots.append(
-                        Slot(
-                            summary=rule.summary.replace("{rotate}", label),
-                            description=rule.description.replace("{rotate}", label),
-                            start=cursor,
-                            end=finish,
-                            location=rule.location,
-                        )
-                    )
-                    busy.append((cursor - travel, finish + travel))
+        # the preferred window gets every candidate day before the fallback is touched,
+        # so "mornings where possible" does not collapse to "mornings on monday only"
+        windows = [rule.window] + ([rule.fallback_window] if rule.fallback_window else [])
+        for win in windows:
+            for day in days:
+                if placed >= rule.per_week:
+                    break
+                label = rule.rotate[rotation % len(rule.rotate)] if rule.rotate else ""
+                slot = _place_one(rule, day, win, (tz, busy, label))
+                if slot is not None:
+                    slots.append(slot)
                     rotation += 1
                     placed += 1
-                    break
-                cursor += _STEP
-            else:
-                _log.debug("No free slot for %r on %s", rule.summary, day)
+            if placed >= rule.per_week:
+                break
 
-        # a partial week at either end of the range cannot fill, so that is not worth warning about
         full_week = monday >= since and monday + timedelta(days=6) <= until
         if placed < rule.per_week and full_week:
             _log.warning(
