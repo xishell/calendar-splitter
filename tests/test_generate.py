@@ -478,3 +478,20 @@ def test_rotate_placeholder_without_a_rotate_list_is_rejected(tmp_path):
             {"kind": "recurring", "summary": "{rotate}", "from": "2026-09-07",
              "until": "2026-09-07", "days": ["mon"], "window": ["07:00", "12:00"],
              "duration_min": 30, "per_week": 1}]})
+
+
+def test_rotation_follows_the_calendar_not_the_placement_order(tmp_path):
+    """The fallback window runs after the preferred one, so placement order is not chronological."""
+    spec = _spec(tmp_path, {"feed": "S", "rules": [
+        {"kind": "recurring", "summary": "{rotate}", "from": "2026-09-07", "until": "2026-09-11",
+         "days": ["mon", "tue", "wed", "thu", "fri"],
+         "window": ["13:00", "18:00"], "fallback_window": ["07:00", "09:00"],
+         "duration_min": 60, "per_week": 5,
+         "rotate": ["F01", "F02", "F03", "F04", "F05"]}]})[0]
+    # block two afternoons, so those two land in the early fallback instead
+    busy = [(_at(9, 12), _at(9, 19)), (_at(10, 12), _at(10, 19))]
+    slots = generate_feed(spec, busy)
+    # some land in the early fallback, which is placed after the whole preferred pass
+    assert any(s.start.hour < 9 for s in slots)
+    in_time_order = sorted(slots, key=lambda s: s.start)
+    assert [s.summary for s in in_time_order] == ["F01", "F02", "F03", "F04", "F05"]

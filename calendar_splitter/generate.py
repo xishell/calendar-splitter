@@ -311,10 +311,10 @@ def _candidates(
 
 def _place_one(
     rule: Rule, day: date, win: tuple[str, str],
-    ctx: tuple[ZoneInfo, list[tuple[datetime, datetime]], list[Placed], str],
+    ctx: tuple[ZoneInfo, list[tuple[datetime, datetime]], list[Placed]],
 ) -> Slot | None:
     """Best legal slot for one day inside one window, or None."""
-    tz, busy, placed, label = ctx
+    tz, busy, placed = ctx
     options = _candidates(rule, day, win, (tz, busy, placed))
     if not options:
         return None
@@ -324,8 +324,8 @@ def _place_one(
     busy.append((start - travel, finish + travel))
     placed.append(Placed(start, finish, rule.tags, rule.feed))
     return Slot(
-        summary=rule.summary.replace("{rotate}", label),
-        description=rule.description.replace("{rotate}", label),
+        summary=rule.summary,
+        description=rule.description,
         start=start,
         end=finish,
         location=rule.location,
@@ -339,7 +339,6 @@ def _expand_recurring(
     until = date.fromisoformat(rule.until)
 
     slots: list[Slot] = []
-    rotation = 0
 
     for monday in _weeks(since, until):
         days = [monday + timedelta(days=_WEEKDAYS[d]) for d in rule.days]
@@ -353,11 +352,9 @@ def _expand_recurring(
             for day in days:
                 if placed_this_week >= rule.per_week:
                     break
-                label = rule.rotate[rotation % len(rule.rotate)] if rule.rotate else ""
-                slot = _place_one(rule, day, win, (tz, busy, placed, label))
+                slot = _place_one(rule, day, win, (tz, busy, placed))
                 if slot is not None:
                     slots.append(slot)
-                    rotation += 1
                     placed_this_week += 1
             if placed_this_week >= rule.per_week:
                 break
@@ -368,7 +365,27 @@ def _expand_recurring(
                 "%r: only placed %d/%d in week of %s",
                 rule.summary, placed_this_week, rule.per_week, monday,
             )
-    return slots
+    return _apply_rotation(rule, slots)
+
+
+def _apply_rotation(rule: Rule, slots: list[Slot]) -> list[Slot]:
+    """Fill {rotate} in date order.
+
+    Labels are often a sequence — lectures to watch in order — and placement order
+    is not chronological, because the fallback window runs after the preferred one.
+    """
+    if not rule.rotate:
+        return slots
+    return [
+        Slot(
+            summary=slot.summary.replace("{rotate}", rule.rotate[i % len(rule.rotate)]),
+            description=slot.description.replace("{rotate}", rule.rotate[i % len(rule.rotate)]),
+            start=slot.start,
+            end=slot.end,
+            location=slot.location,
+        )
+        for i, slot in enumerate(sorted(slots, key=lambda s: s.start))
+    ]
 
 
 def _expand_fixed(rule: Rule, tz: ZoneInfo) -> list[Slot]:
