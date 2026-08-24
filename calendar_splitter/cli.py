@@ -65,6 +65,9 @@ def main() -> int:
         token_map_path=Path(token_map_path),
         specs_dir=Path(specs_dir),
         campus_travel_min=int(os.environ.get("CAMPUS_TRAVEL_MIN", "0")),
+        busy_exclude=tuple(
+            x.strip() for x in os.environ.get("BUSY_EXCLUDE", "").split(",") if x.strip()
+        ),
         timeout=int(os.environ.get("FETCH_TIMEOUT", "30")),
     )
 

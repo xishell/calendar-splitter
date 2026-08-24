@@ -3,6 +3,7 @@
 import json
 
 import pytest
+from icalendar import Calendar
 
 from calendar_splitter.pipeline import PipelineConfig, run_pipeline
 
@@ -150,3 +151,64 @@ END:VCALENDAR
 
     assert run(0).generated_events == 1
     assert run(45).generated_events == 1  # still placed, just pushed clear of the journey
+
+
+def _ics(*events):
+    body = "".join(
+        f"BEGIN:VEVENT\nUID:{u}@x\nSUMMARY:{s}\nDTSTART:{a}\nDTEND:{b}\nEND:VEVENT\n"
+        for u, s, a, b in events)
+    return f"BEGIN:VCALENDAR\nVERSION:2.0\nPRODID:-//t//EN\n{body}END:VCALENDAR\n".encode()
+
+
+def _cfg(tmp_path, tag, **kw):
+    return PipelineConfig(
+        local_fallback=tmp_path / "up.ics", state_path=tmp_path / f"s{tag}.json",
+        courses_dir=tmp_path / "c", feeds_dir=tmp_path / f"f{tag}",
+        token_map_path=tmp_path / f"t{tag}.json", specs_dir=tmp_path / "specs", **kw)
+
+
+def _study_spec(tmp_path):
+    specs = tmp_path / "specs"
+    specs.mkdir(exist_ok=True)
+    (specs / "s.json").write_text(json.dumps({"feed": "S", "rules": [
+        {"kind": "recurring", "summary": "Study", "from": "2026-09-07", "until": "2026-09-07",
+         "days": ["mon"], "window": ["08:00", "18:00"], "duration_min": 120, "per_week": 1}]}))
+    return specs
+
+
+class TestBusyExclude:
+    def test_excluded_course_does_not_reserve_time(self, tmp_path):
+        (tmp_path / "up.ics").write_bytes(_ics(
+            ("a", "IS1200 Lecture", "20260907T060000Z", "20260907T120000Z")))
+        _study_spec(tmp_path)
+
+        kept = run_pipeline(_cfg(tmp_path, "1"))
+        excluded = run_pipeline(_cfg(tmp_path, "2", busy_exclude=("IS1200",)))
+        assert kept.generated_events == 1
+        assert excluded.generated_events == 1
+        # with IS1200 blocking 08:00-16:00 the block is pushed late; excluded, it starts at 08:00
+        assert self._start(tmp_path, "f2") < self._start(tmp_path, "f1")
+
+    @staticmethod
+    def _start(tmp_path, d):
+        p = next((tmp_path / d).glob("S--*.ics"))
+        ev = next(c for c in Calendar.from_ical(p.read_bytes()).walk() if c.name == "VEVENT")
+        return ev.decoded("DTSTART")
+
+
+class TestStableUids:
+    def test_uid_survives_the_block_moving_within_its_day(self, tmp_path):
+        _study_spec(tmp_path)
+        (tmp_path / "up.ics").write_bytes(_ics())
+        first = self._uid(tmp_path, "a", ())
+        # a lecture appears and pushes the block later the same day
+        (tmp_path / "up.ics").write_bytes(_ics(
+            ("a", "IS1200 Lecture", "20260907T060000Z", "20260907T080000Z")))
+        second = self._uid(tmp_path, "b", ())
+        assert first == second
+
+    def _uid(self, tmp_path, tag, exclude):
+        run_pipeline(_cfg(tmp_path, tag, busy_exclude=exclude))
+        p = next((tmp_path / f"f{tag}").glob("S--*.ics"))
+        ev = next(c for c in Calendar.from_ical(p.read_bytes()).walk() if c.name == "VEVENT")
+        return str(ev.get("UID"))

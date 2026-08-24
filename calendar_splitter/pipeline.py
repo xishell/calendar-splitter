@@ -20,7 +20,7 @@ from calendar_splitter.core.writer import (
     new_calendar,
 )
 from calendar_splitter.fetch import fetch_upstream
-from calendar_splitter.generate import generate_feed, load_specs
+from calendar_splitter.generate import generate_feed, load_specs, slug
 from calendar_splitter.logging import get_logger, redact
 from calendar_splitter.strategies import classify_event
 from calendar_splitter.tokens import TokenStore
@@ -41,6 +41,8 @@ class PipelineConfig:
     specs_dir: Path = Path("specs")
     # minutes each way to campus; upstream lectures reserve this around themselves
     campus_travel_min: int = 0
+    # course codes still on the timetable but not actually attended
+    busy_exclude: tuple[str, ...] = ()
     timeout: int = 30
 
 
@@ -66,19 +68,32 @@ def _add_generated_feeds(
 ) -> None:
     """Expand specs into feeds, treating upstream events as the busy set."""
     pad = timedelta(minutes=config.campus_travel_min)
-    busy = [(e.start - pad, e.end + pad) for e in events if e.start and e.end]
+    skip = {c.upper() for c in config.busy_exclude}
+    busy = []
+    dropped = 0
+    for e in events:
+        if not (e.start and e.end):
+            continue
+        code = detect_course_code(e.summary, e.description)
+        if code and code.upper() in skip:
+            dropped += 1
+            continue
+        busy.append((e.start - pad, e.end + pad))
+    if dropped:
+        _log.info("Ignored %d event(s) from %s when placing generated feeds.",
+                  dropped, ", ".join(sorted(skip)))
     for spec in load_specs(config.specs_dir):
         slots = generate_feed(spec, busy)
         if not slots:
             continue
         cal = new_calendar(spec.name or spec.feed, color=spec.color)
-        for i, slot in enumerate(slots):
-            cal.add_component(
-                build_generated_event(
-                    f"{spec.feed.lower()}-{i}-{slot.start:%Y%m%dT%H%M}@calendar-splitter",
-                    slot,
-                )
-            )
+        seen: dict[str, int] = {}
+        for slot in slots:
+            # a block that shifts within its day must keep its uid, or every subscriber
+            # sees the old one deleted and a new one added on each run
+            base = f"{spec.feed.lower()}-{slot.start:%Y%m%d}-{slug(slot.summary)}"
+            n = seen[base] = seen.get(base, -1) + 1
+            cal.add_component(build_generated_event(f"{base}-{n}@calendar-splitter", slot))
         buckets[spec.feed] = (cal, [])
         result.generated_events += len(slots)
 

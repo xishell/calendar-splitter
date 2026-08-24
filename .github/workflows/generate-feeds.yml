@@ -13,6 +13,8 @@ env:
   FEEDS_DIR: _feeds/docs/feeds
   COURSES_DIR: _feeds/events
   SPECS_DIR: _feeds/specs
+  CAMPUS_TRAVEL_MIN: '15'
+  BUSY_EXCLUDE: IS1200
   TOKEN_MAP_PATH: _feeds/token_map.json
   UPSTREAM_STATE_PATH: _feeds/upstream_state.json
   PYTHONUNBUFFERED: '1'
@@ -60,6 +62,8 @@ jobs:
           SOURCE_ICS_URL: ${{ secrets.SOURCE_ICS_URL }}
           COURSES_DIR: ${{ env.COURSES_DIR }}
           SPECS_DIR: ${{ env.SPECS_DIR }}
+          CAMPUS_TRAVEL_MIN: ${{ env.CAMPUS_TRAVEL_MIN }}
+          BUSY_EXCLUDE: ${{ env.BUSY_EXCLUDE }}
           TOKEN_MAP_PATH: ${{ env.TOKEN_MAP_PATH }}
           UPSTREAM_STATE_PATH: ${{ env.UPSTREAM_STATE_PATH }}
           FEEDS_DIR: ${{ env.FEEDS_DIR }}

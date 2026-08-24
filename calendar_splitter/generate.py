@@ -8,6 +8,7 @@ and fed into the same write path.
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass, field
 from datetime import date, datetime, time, timedelta
 from pathlib import Path
@@ -160,6 +161,12 @@ def load_specs(specs_dir: Path) -> list[FeedSpec]:
     specs.sort(key=lambda s: (s.priority, s.feed))
     _log.info("Loaded %d generated feed spec(s).", len(specs))
     return specs
+
+
+def slug(text: str) -> str:
+    """Lowercase ascii-ish slug, used to build stable event uids."""
+    text = text.lower().translate(str.maketrans("åäöéèü", "aaoeeu"))
+    return re.sub(r"[^a-z0-9]+", "-", text).strip("-")[:40]
 
 
 def _overlaps(start: datetime, end: datetime, busy: list[tuple[datetime, datetime]]) -> bool:
