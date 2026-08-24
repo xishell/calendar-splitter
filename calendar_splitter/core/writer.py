@@ -32,10 +32,11 @@ def build_event(
     # Add core properties that were parsed into separate fields
     if src.uid:
         ev.add("UID", src.uid)
+    # handing icalendar a date rather than a datetime is what emits VALUE=DATE
     if src.start is not None:
-        ev.add("DTSTART", src.start)
+        ev.add("DTSTART", src.start.date() if src.all_day else src.start)
     if src.end is not None:
-        ev.add("DTEND", src.end)
+        ev.add("DTEND", src.end.date() if src.all_day else src.end)
     if src.location:
         ev.add("LOCATION", vText(src.location))
 

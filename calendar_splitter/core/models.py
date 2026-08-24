@@ -98,6 +98,9 @@ class Event:
     start: datetime | None
     end: datetime | None
     properties: dict[str, Any] = field(default_factory=dict)
+    # start/end stay datetimes so intervals compare, but an all-day event has to
+    # be written back as VALUE=DATE or clients render it as a midnight appointment
+    all_day: bool = False
 
 
 @dataclass

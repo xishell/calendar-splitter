@@ -63,8 +63,10 @@ def parse_calendar(data: bytes) -> list[Event]:
         description = str(comp.get("DESCRIPTION", "") or "")
         location = str(comp.get("LOCATION", "") or "")
 
-        start_dt = _extract_datetime(comp.get("DTSTART"))
+        start_prop = comp.get("DTSTART")
+        start_dt = _extract_datetime(start_prop)
         end_dt = _extract_datetime(comp.get("DTEND"))
+        all_day = _is_date_only(start_prop)
 
         # Collect all other properties for passthrough
         props: dict[str, Any] = {}
@@ -81,6 +83,7 @@ def parse_calendar(data: bytes) -> list[Event]:
             start=start_dt,
             end=end_dt,
             properties=props,
+            all_day=all_day,
         ))
 
     return events
@@ -93,6 +96,14 @@ def parse_calendar_raw(data: bytes) -> Any:
     except Exception as exc:
         msg = f"Failed to parse ICS data: {exc}"
         raise ParseError(msg) from exc
+
+
+def _is_date_only(dt_prop: object) -> bool:
+    """True for an all-day event, whose DTSTART is a bare date."""
+    if dt_prop is None:
+        return False
+    dt_value = dt_prop.dt if hasattr(dt_prop, "dt") else dt_prop
+    return isinstance(dt_value, date) and not isinstance(dt_value, datetime)
 
 
 def _extract_datetime(dt_prop: object) -> datetime | None:

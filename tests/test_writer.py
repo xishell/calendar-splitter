@@ -1,8 +1,10 @@
 """Tests for ICS output generation."""
 
+from datetime import UTC, datetime
+
 from icalendar import Calendar
 
-from calendar_splitter.core.models import ClassifiedEvent, Event, EventType
+from calendar_splitter.core.models import ClassifiedEvent, Event
 from calendar_splitter.core.writer import build_event, clone_calendar_base, new_calendar
 
 
@@ -63,3 +65,22 @@ class TestGeneratedCalendar:
         ical = new_calendar("Study", color="#444a95").to_ical().decode()
         assert "X-APPLE-CALENDAR-COLOR:#444a95" in ical
         assert "X-OUTLOOK-COLOR:#444a95" in ical
+
+
+class TestAllDayRoundTrip:
+    def _ical(self, *, all_day):
+        ev = Event(uid="u", summary="S", description="", location="",
+                   start=datetime(2026, 9, 10, 0, 0, tzinfo=UTC),
+                   end=datetime(2026, 9, 11, 0, 0, tzinfo=UTC), all_day=all_day)
+        built = build_event(ClassifiedEvent(event=ev, course_code="IS1200"), "S", "")
+        return built.to_ical().decode()
+
+    def test_all_day_is_written_as_value_date(self):
+        out = self._ical(all_day=True)
+        assert "DTSTART;VALUE=DATE:20260910" in out
+        assert "DTEND;VALUE=DATE:20260911" in out
+
+    def test_timed_event_keeps_its_time(self):
+        out = self._ical(all_day=False)
+        assert "VALUE=DATE" not in out
+        assert "20260910T000000" in out
