@@ -11,7 +11,7 @@ from calendar_splitter.core.models import ClassifiedEvent
 
 def clone_calendar_base(src_cal: Any, name: str) -> Any:
     """Clone calendar metadata without events."""
-    dst: Any = Calendar()  # type: ignore[no-untyped-call]
+    dst: Any = Calendar()
     for key in ("PRODID", "VERSION", "CALSCALE", "METHOD", "X-WR-CALDESC", "X-PUBLISHED-TTL"):
         if key in src_cal:
             dst.add(key, src_cal.get(key))
@@ -25,7 +25,7 @@ def build_event(
     new_description: str,
 ) -> Any:
     """Build an icalendar Event with rewritten summary/description and passthrough properties."""
-    ev: Any = Event()  # type: ignore[no-untyped-call]
+    ev: Any = Event()
 
     src = classified.event
 
@@ -52,7 +52,7 @@ def build_event(
 
 def new_calendar(name: str, color: str = "") -> Any:
     """Fresh calendar for generated feeds, which have no upstream to clone from."""
-    cal: Any = Calendar()  # type: ignore[no-untyped-call]
+    cal: Any = Calendar()
     cal.add("PRODID", "-//calendar-splitter//generated//EN")
     cal.add("VERSION", "2.0")
     cal.add("X-WR-CALNAME", vText(name))
@@ -65,7 +65,7 @@ def new_calendar(name: str, color: str = "") -> Any:
 
 def build_generated_event(uid: str, slot: Any) -> Any:
     """Build an ICS event from a generated slot (duck-typed to avoid importing generate)."""
-    ev: Any = Event()  # type: ignore[no-untyped-call]
+    ev: Any = Event()
     ev.add("UID", uid)
     ev.add("DTSTART", slot.start)
     ev.add("DTEND", slot.end)
