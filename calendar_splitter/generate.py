@@ -152,6 +152,8 @@ def _parse_rule(raw: dict[str, Any], where: str) -> Rule:
         max_per_day=int(raw.get("max_per_day", 0)),
     )
 
+    if "{rotate}" in rule.summary + rule.description and not rule.rotate:
+        raise ConfigError(f"{where}: uses {{rotate}} but no rotate list, which blanks the summary")
     if rule.prefer not in ("early", "late"):
         raise ConfigError(f"{where}: prefer must be 'early' or 'late', got {rule.prefer!r}")
     if kind == "fixed" and not (rule.start and rule.end):

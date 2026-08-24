@@ -469,3 +469,12 @@ def test_recovery_tags_do_cross_feeds(tmp_path):
     squat = generate_feed(gym, busy, placed)[0]
     intervals = generate_feed(run, busy, placed)[0]
     assert (intervals.start - squat.end) >= timedelta(hours=24)
+
+
+def test_rotate_placeholder_without_a_rotate_list_is_rejected(tmp_path):
+    """This silently published events with blank titles."""
+    with pytest.raises(ConfigError, match="no rotate list"):
+        _spec(tmp_path, {"feed": "G", "rules": [
+            {"kind": "recurring", "summary": "{rotate}", "from": "2026-09-07",
+             "until": "2026-09-07", "days": ["mon"], "window": ["07:00", "12:00"],
+             "duration_min": 30, "per_week": 1}]})
