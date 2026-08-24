@@ -1,0 +1,86 @@
+name: Prune finished course feeds
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Report what would go without removing it'
+        type: boolean
+        default: true
+      after_days:
+        description: 'Remove feeds git has not seen change for this many days'
+        type: string
+        default: '304'
+  schedule:
+    # 05:00 Europe/Stockholm on the 1st, an hour before the daily feed build
+    - cron: '0 3 1 * *'
+
+permissions:
+  contents: read
+
+env:
+  FEEDS_DIR: _feeds/docs/feeds
+  TOKEN_MAP_PATH: _feeds/token_map.json
+  FEEDS_REPO_DIR: _feeds
+  PYTHONUNBUFFERED: '1'
+
+jobs:
+  prune:
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Checkout splitter
+        uses: actions/checkout@v4
+
+      - name: Checkout feeds repository
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ secrets.FEEDS_REPO }}
+          token: ${{ secrets.FEEDS_REPO_TOKEN }}
+          path: _feeds
+          # prune reads git history, so the full log has to come with it
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Install
+        run: uv pip install --system -e .
+
+      - name: Prune
+        env:
+          FEEDS_DIR: ${{ env.FEEDS_DIR }}
+          TOKEN_MAP_PATH: ${{ env.TOKEN_MAP_PATH }}
+          FEEDS_REPO_DIR: ${{ env.FEEDS_REPO_DIR }}
+          PRUNE_AFTER_DAYS: ${{ inputs.after_days || '304' }}
+          PRUNE_DRY_RUN: ${{ inputs.dry_run }}
+          LOG_LEVEL: INFO
+        run: python -m calendar_splitter --prune-feeds
+
+      - name: Rebuild README without the removed feeds
+        if: inputs.dry_run != true
+        env:
+          TOKEN_MAP_PATH: ${{ env.TOKEN_MAP_PATH }}
+          BASE_URL: ${{ secrets.BASE_URL }}
+          README_DIR: _feeds
+        run: python -m calendar_splitter --generate-readme
+
+      - name: Commit
+        if: inputs.dry_run != true
+        working-directory: _feeds
+        run: |
+          if git diff --quiet; then
+            echo "Nothing to prune."
+            exit 0
+          fi
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Prune feeds for finished courses"
+          git push

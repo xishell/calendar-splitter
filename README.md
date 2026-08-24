@@ -156,6 +156,26 @@ Items can use `match` rules to filter events by time, location, description, or 
 
 Available strategies: `time`, `description`, `location`, `url`, `all`, `any`.
 
+## Pruning finished courses
+
+A feed nobody writes any more still sits on the site and still appears in the README as
+something to subscribe to. `--prune-feeds` removes any whose file git has not seen change for
+longer than `PRUNE_AFTER_DAYS` (304, ten months), and drops its token so the README stops
+listing it.
+
+Age is the signal rather than "absent from the last run", because a transient upstream failure
+must never be able to delete anything. A checkout resets mtimes, so the question is when git
+last recorded a change — which means the feeds repo needs `fetch-depth: 0`.
+
+```sh
+FEEDS_DIR=_feeds/docs/feeds TOKEN_MAP_PATH=_feeds/token_map.json \
+FEEDS_REPO_DIR=_feeds PRUNE_DRY_RUN=true \
+python -m calendar_splitter --prune-feeds
+```
+
+The `Prune finished course feeds` workflow runs monthly and defaults to a dry run when started
+by hand.
+
 ## Environment variables
 
 | Variable | Required | Description |
@@ -166,6 +186,11 @@ Available strategies: `time`, `description`, `location`, `url`, `all`, `any`.
 | `LOCAL_UPSTREAM_ICS` | no | Local ICS fallback path (default: `personal.ics`) |
 | `COURSES_DIR` | no | Directory of course config JSONs (default: `courses`) |
 | `SPECS_DIR` | no | Directory of generated-feed specs (default: `specs`) |
+| `CAMPUS_TRAVEL_MIN` | no | Minutes each way to campus, reserved around upstream events |
+| `BUSY_EXCLUDE` | no | Course codes whose events should not reserve time |
+| `PRUNE_AFTER_DAYS` | no | Age at which a feed is pruned (default: `304`) |
+| `PRUNE_DRY_RUN` | no | Report what would be pruned without removing it |
+| `FEEDS_REPO_DIR` | no | Feeds repo root, needed for prune to read git history |
 
 | `UPSTREAM_STATE_PATH` | no | Cache state file (default: `_feeds/upstream_state.json`) |
 | `LOG_LEVEL` | no | Logging level (default: `INFO`) |

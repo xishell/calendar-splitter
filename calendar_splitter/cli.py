@@ -10,6 +10,7 @@ from dotenv import load_dotenv
 
 from calendar_splitter.logging import get_logger, setup_logging
 from calendar_splitter.pipeline import PipelineConfig, run_pipeline
+from calendar_splitter.prune import DEFAULT_MAX_AGE_DAYS, PruneConfig, prune
 from calendar_splitter.readme import generate_readme
 
 _log = get_logger(__name__)
@@ -37,6 +38,27 @@ def _run_generate_readme() -> int:
     return 0
 
 
+def _run_prune_feeds() -> int:
+    """Remove published feeds no run has touched in a long time."""
+    feeds_dir = os.environ.get("FEEDS_DIR", "")
+    token_map_path = os.environ.get("TOKEN_MAP_PATH", "")
+    repo = os.environ.get("FEEDS_REPO_DIR", "")
+
+    if not feeds_dir or not token_map_path or not repo:
+        _log.error("FEEDS_DIR, TOKEN_MAP_PATH, and FEEDS_REPO_DIR are required.")
+        return 2
+
+    removed = prune(PruneConfig(
+        feeds_dir=Path(feeds_dir),
+        token_map_path=Path(token_map_path),
+        repo=Path(repo),
+        max_age_days=int(os.environ.get("PRUNE_AFTER_DAYS", str(DEFAULT_MAX_AGE_DAYS))),
+        dry_run=os.environ.get("PRUNE_DRY_RUN", "").lower() in ("1", "true", "yes"),
+    ))
+    _log.info("Prune finished: %d feed(s).", len(removed))
+    return 0
+
+
 def main() -> int:
     """Run calendar-splitter from environment variables."""
     load_dotenv()
@@ -44,6 +66,9 @@ def main() -> int:
 
     if "--generate-readme" in sys.argv:
         return _run_generate_readme()
+
+    if "--prune-feeds" in sys.argv:
+        return _run_prune_feeds()
 
     specs_dir = os.environ.get("SPECS_DIR", "specs")
     feeds_dir = os.environ.get("FEEDS_DIR", "")
