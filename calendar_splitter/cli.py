@@ -45,6 +45,7 @@ def main() -> int:
     if "--generate-readme" in sys.argv:
         return _run_generate_readme()
 
+    specs_dir = os.environ.get("SPECS_DIR", "specs")
     feeds_dir = os.environ.get("FEEDS_DIR", "")
     token_map_path = os.environ.get("TOKEN_MAP_PATH", "")
 
@@ -62,6 +63,7 @@ def main() -> int:
         courses_dir=Path(os.environ.get("COURSES_DIR", "courses")),
         feeds_dir=Path(feeds_dir),
         token_map_path=Path(token_map_path),
+        specs_dir=Path(specs_dir),
         timeout=int(os.environ.get("FETCH_TIMEOUT", "30")),
     )
 

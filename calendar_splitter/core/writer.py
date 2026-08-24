@@ -47,3 +47,29 @@ def build_event(
     ev.add("DESCRIPTION", vText(new_description or ""))
 
     return ev
+
+
+def new_calendar(name: str, color: str = "") -> Any:
+    """Fresh calendar for generated feeds, which have no upstream to clone from."""
+    cal: Any = Calendar()  # type: ignore[no-untyped-call]
+    cal.add("PRODID", "-//calendar-splitter//generated//EN")
+    cal.add("VERSION", "2.0")
+    cal.add("X-WR-CALNAME", vText(name))
+    if color:
+        # apple reads the first, google and thunderbird the second
+        cal.add("X-APPLE-CALENDAR-COLOR", vText(color))
+        cal.add("X-OUTLOOK-COLOR", vText(color))
+    return cal
+
+
+def build_generated_event(uid: str, slot: Any) -> Any:
+    """Build an ICS event from a generated slot (duck-typed to avoid importing generate)."""
+    ev: Any = Event()  # type: ignore[no-untyped-call]
+    ev.add("UID", uid)
+    ev.add("DTSTART", slot.start)
+    ev.add("DTEND", slot.end)
+    ev.add("SUMMARY", vText(slot.summary))
+    ev.add("DESCRIPTION", vText(slot.description or ""))
+    if slot.location:
+        ev.add("LOCATION", vText(slot.location))
+    return ev

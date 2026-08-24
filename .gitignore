@@ -99,3 +99,4 @@ logs/
 
 events/
 *.ics
+.parked-v3/

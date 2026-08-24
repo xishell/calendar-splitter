@@ -3,7 +3,7 @@
 from icalendar import Calendar
 
 from calendar_splitter.core.models import ClassifiedEvent, Event, EventType
-from calendar_splitter.core.writer import build_event, clone_calendar_base
+from calendar_splitter.core.writer import build_event, clone_calendar_base, new_calendar
 
 
 class TestCloneCalendarBase:
@@ -52,3 +52,14 @@ class TestBuildEvent:
         classified = ClassifiedEvent(event=ev, course_code="TEST")
         ical_ev = build_event(classified, "S", "")
         assert str(ical_ev.get("DESCRIPTION")) == ""
+
+
+class TestGeneratedCalendar:
+    def test_no_colour_properties_when_unset(self):
+        ical = new_calendar("Plain").to_ical().decode()
+        assert "X-APPLE-CALENDAR-COLOR" not in ical
+
+    def test_colour_written_for_both_client_families(self):
+        ical = new_calendar("Study", color="#444a95").to_ical().decode()
+        assert "X-APPLE-CALENDAR-COLOR:#444a95" in ical
+        assert "X-OUTLOOK-COLOR:#444a95" in ical

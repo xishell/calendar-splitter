@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 from icalendar import Calendar
 
@@ -11,8 +12,14 @@ from calendar_splitter.config import load_courses_from_dir
 from calendar_splitter.core.models import CourseConfig, FeedResult
 from calendar_splitter.core.parser import detect_course_code, parse_calendar, parse_calendar_raw
 from calendar_splitter.core.rewriter import rewrite_event
-from calendar_splitter.core.writer import build_event, clone_calendar_base
+from calendar_splitter.core.writer import (
+    build_event,
+    build_generated_event,
+    clone_calendar_base,
+    new_calendar,
+)
 from calendar_splitter.fetch import fetch_upstream
+from calendar_splitter.generate import generate_feed, load_specs
 from calendar_splitter.logging import get_logger, redact
 from calendar_splitter.strategies import classify_event
 from calendar_splitter.tokens import TokenStore
@@ -30,6 +37,7 @@ class PipelineConfig:
     courses_dir: Path = Path("courses")
     feeds_dir: Path = Path("_feeds")
     token_map_path: Path = Path("_feeds/tokens.json")
+    specs_dir: Path = Path("specs")
     timeout: int = 30
 
 
@@ -41,7 +49,32 @@ class PipelineResult:
     total_events: int = 0
     kept_events: int = 0
     filtered_events: int = 0
+    generated_events: int = 0
     skipped: bool = False
+
+
+def _add_generated_feeds(
+    config: PipelineConfig,
+    events: list[Any],
+    buckets: dict[str, tuple[Calendar, list[tuple[str, str]]]],
+    result: PipelineResult,
+) -> None:
+    """Expand specs into feeds, treating upstream events as the busy set."""
+    busy = [(e.start, e.end) for e in events if e.start and e.end]
+    for spec in load_specs(config.specs_dir):
+        slots = generate_feed(spec, busy)
+        if not slots:
+            continue
+        cal = new_calendar(spec.name or spec.feed, color=spec.color)
+        for i, slot in enumerate(slots):
+            cal.add_component(
+                build_generated_event(
+                    f"{spec.feed.lower()}-{i}-{slot.start:%Y%m%dT%H%M}@calendar-splitter",
+                    slot,
+                )
+            )
+        buckets[spec.feed] = (cal, [])
+        result.generated_events += len(slots)
 
 
 def run_pipeline(config: PipelineConfig) -> PipelineResult:
@@ -100,20 +133,22 @@ def run_pipeline(config: PipelineConfig) -> PipelineResult:
         len(buckets),
     )
 
+    _add_generated_feeds(config, events, buckets, result)
+
     # Write feeds
     token_store = TokenStore(config.token_map_path)
     token_store.load()
 
     config.feeds_dir.mkdir(parents=True, exist_ok=True)
 
-    for course_code, (cal, _) in sorted(buckets.items()):
-        token = token_store.get_or_create(course_code)
-        out_path = config.feeds_dir / f"{course_code}--{token}.ics"
+    for feed_name, (cal, _) in sorted(buckets.items()):
+        token = token_store.get_or_create(feed_name)
+        out_path = config.feeds_dir / f"{feed_name}--{token}.ics"
         try:
             out_path.write_bytes(cal.to_ical())
             event_count = sum(1 for c in cal.walk() if c.name == "VEVENT")
             result.feeds.append(FeedResult(
-                course_code=course_code,
+                course_code=feed_name,
                 path=str(out_path),
                 event_count=event_count,
             ))
