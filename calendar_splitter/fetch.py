@@ -41,12 +41,16 @@ def fetch_upstream(
     local_fallback: Path,
     state_path: Path,
     timeout: int = 30,
+    force: bool = False,
 ) -> bytes | None:
     """Fetch upstream ICS data, returning bytes only if content changed.
 
-    Returns None when upstream is unchanged since last run.
+    Returns None when upstream is unchanged since last run, unless force is set.
     """
     state = _read_state(state_path)
+    if force:
+        # the upstream is only one of the inputs; a changed config must rebuild too
+        state = {}
     source_url = (source_url or "").strip()
 
     if not source_url:

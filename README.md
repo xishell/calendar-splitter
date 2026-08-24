@@ -8,7 +8,8 @@ Built for KTH calendars but works with any ICS source where events contain cours
 
 ## How it works
 
-1. **Fetch** — downloads the upstream ICS (or reads a local file), skipping if unchanged (ETag/SHA256 caching)
+1. **Fetch** — downloads the upstream ICS (or reads a local file), skipping only when both the
+   feed and the course/spec configs are unchanged (ETag/SHA256 caching)
 2. **Parse** — extracts events and detects course codes from summaries/descriptions
 3. **Classify** — matches events to configured event types using pattern + strategy rules
 4. **Rewrite** — applies summary/description templates with lecture titles, modules, and Canvas links
@@ -191,6 +192,7 @@ by hand.
 | `PRUNE_AFTER_DAYS` | no | Age at which a feed is pruned (default: `152`) |
 | `PRUNE_DRY_RUN` | no | Report what would be pruned without removing it |
 | `FEEDS_REPO_DIR` | no | Feeds repo root, needed for prune to read git history |
+| `FORCE_REBUILD` | no | Rebuild even when nothing changed (or pass `--force`) |
 
 | `UPSTREAM_STATE_PATH` | no | Cache state file (default: `_feeds/upstream_state.json`) |
 | `LOG_LEVEL` | no | Logging level (default: `INFO`) |

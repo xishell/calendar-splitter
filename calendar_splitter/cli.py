@@ -89,6 +89,10 @@ def main() -> int:
         feeds_dir=Path(feeds_dir),
         token_map_path=Path(token_map_path),
         specs_dir=Path(specs_dir),
+        force=(
+            "--force" in sys.argv
+            or os.environ.get("FORCE_REBUILD", "").lower() in ("1", "true", "yes")
+        ),
         campus_travel_min=int(os.environ.get("CAMPUS_TRAVEL_MIN", "0")),
         busy_exclude=tuple(
             x.strip() for x in os.environ.get("BUSY_EXCLUDE", "").split(",") if x.strip()

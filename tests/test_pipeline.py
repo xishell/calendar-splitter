@@ -212,3 +212,43 @@ class TestStableUids:
         p = next((tmp_path / f"f{tag}").glob("S--*.ics"))
         ev = next(c for c in Calendar.from_ical(p.read_bytes()).walk() if c.name == "VEVENT")
         return str(ev.get("UID"))
+
+
+class TestConfigChangeForcesRebuild:
+    """A spec edit used to be ignored until the upstream ICS also moved."""
+
+    def _run(self, tmp_path, **kw):
+        return run_pipeline(PipelineConfig(
+            local_fallback=tmp_path / "up.ics", state_path=tmp_path / "state.json",
+            courses_dir=tmp_path / "c", feeds_dir=tmp_path / "feeds",
+            token_map_path=tmp_path / "tok.json", specs_dir=tmp_path / "specs", **kw))
+
+    def _setup(self, tmp_path, summary):
+        (tmp_path / "up.ics").write_bytes(_ics(
+            ("a", "IS1200 Lecture", "20260907T060000Z", "20260907T070000Z")))
+        specs = tmp_path / "specs"
+        specs.mkdir(exist_ok=True)
+        (specs / "s.json").write_text(json.dumps({"feed": "S", "rules": [
+            {"kind": "recurring", "summary": summary, "from": "2026-09-07",
+             "until": "2026-09-07", "days": ["mon"], "window": ["08:00", "18:00"],
+             "duration_min": 60, "per_week": 1}]}))
+
+    def test_unchanged_everything_still_skips(self, tmp_path):
+        self._setup(tmp_path, "Study")
+        assert self._run(tmp_path).skipped is False
+        assert self._run(tmp_path).skipped is True
+
+    def test_editing_a_spec_rebuilds(self, tmp_path):
+        self._setup(tmp_path, "Study")
+        self._run(tmp_path)
+        assert self._run(tmp_path).skipped is True
+        self._setup(tmp_path, "Study, renamed")
+        assert self._run(tmp_path).skipped is False
+        out = next((tmp_path / "feeds").glob("S--*.ics")).read_text()
+        assert "Study\\, renamed" in out or "Study, renamed" in out
+
+    def test_force_rebuilds_without_any_change(self, tmp_path):
+        self._setup(tmp_path, "Study")
+        self._run(tmp_path)
+        assert self._run(tmp_path).skipped is True
+        assert self._run(tmp_path, force=True).skipped is False

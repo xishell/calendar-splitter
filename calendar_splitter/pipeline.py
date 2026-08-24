@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 from dataclasses import dataclass, field
 from datetime import timedelta
 from pathlib import Path
@@ -39,6 +41,8 @@ class PipelineConfig:
     feeds_dir: Path = Path("_feeds")
     token_map_path: Path = Path("_feeds/tokens.json")
     specs_dir: Path = Path("specs")
+    # rebuild even when the upstream has not moved, for when a config has
+    force: bool = False
     # minutes each way to campus; upstream lectures reserve this around themselves
     campus_travel_min: int = 0
     # course codes still on the timetable but not actually attended
@@ -58,6 +62,48 @@ class PipelineResult:
     skipped: bool = False
     # summary + reason for every event that did not make it into a feed
     dropped: list[tuple[str, str]] = field(default_factory=list)
+
+
+def _fetch(config: PipelineConfig, config_digest: str) -> bytes | None:
+    """Upstream bytes, rebuilding when either the feed or the config has moved."""
+    previous = _read_config_digest(config.state_path)
+    config_changed = previous is not None and previous != config_digest
+    if config_changed:
+        _log.info("Course or spec config changed; rebuilding regardless of upstream.")
+    return fetch_upstream(
+        source_url=config.source_url or None,
+        local_fallback=config.local_fallback,
+        state_path=config.state_path,
+        timeout=config.timeout,
+        force=config.force or config_changed,
+    )
+
+
+def _config_digest(config: PipelineConfig) -> str:
+    """Fingerprint of every config file, so an edit forces a rebuild."""
+    h = hashlib.sha256()
+    for d in (config.courses_dir, config.specs_dir):
+        for path in sorted(d.glob("*.json")) if d.is_dir() else []:
+            h.update(path.name.encode())
+            h.update(path.read_bytes())
+    return h.hexdigest()
+
+
+def _read_config_digest(state_path: Path) -> str | None:
+    try:
+        return str(json.loads(state_path.read_text())["config_digest"])
+    except (OSError, ValueError, KeyError):
+        return None
+
+
+def _write_config_digest(state_path: Path, digest: str) -> None:
+    try:
+        state = json.loads(state_path.read_text()) if state_path.exists() else {}
+    except ValueError:
+        state = {}
+    state["config_digest"] = digest
+    state_path.parent.mkdir(parents=True, exist_ok=True)
+    state_path.write_text(json.dumps(state, indent=2), encoding="utf-8")
 
 
 def _add_generated_feeds(
@@ -102,12 +148,8 @@ def _add_generated_feeds(
 def run_pipeline(config: PipelineConfig) -> PipelineResult:
     """Execute the full pipeline."""
     # Fetch
-    upstream = fetch_upstream(
-        source_url=config.source_url or None,
-        local_fallback=config.local_fallback,
-        state_path=config.state_path,
-        timeout=config.timeout,
-    )
+    config_digest = _config_digest(config)
+    upstream = _fetch(config, config_digest)
     if upstream is None:
         _log.info("Upstream unchanged, nothing to do.")
         return PipelineResult(skipped=True)
@@ -186,6 +228,7 @@ def run_pipeline(config: PipelineConfig) -> PipelineResult:
             _log.warning("Failed writing %s: %s", redact(out_path.name), exc)
 
     token_store.save()
+    _write_config_digest(config.state_path, config_digest)
     _log.info("Wrote %d feeds into %s.", len(result.feeds), redact(str(config.feeds_dir)))
 
     return result
