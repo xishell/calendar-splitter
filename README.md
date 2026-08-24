@@ -50,6 +50,29 @@ timezone). Use for exams, deadlines and registration windows.
 `window`, `duration_min`, `per_week`, `rotate`. For each week it walks `days` in order and takes the
 first free slot inside `window`, stepping in 15-minute increments, until `per_week` are placed.
 
+### Placement
+
+Each candidate start inside the window is scored and the best one wins, rather than simply the
+first that fits. The key is `(hour bucket by preference, clearance, exact offset)`: `prefer`
+(`early` by default, or `late`) decides which end of the window is favoured and dominates;
+within the same hour the slot with the most room around it wins, which is what stops sessions
+stacking back to back.
+
+### Recovery
+
+| Field | Effect |
+|---|---|
+| `min_gap_min` | Breathing room required either side of anything already scheduled |
+| `tags` | What a session is, e.g. `["lift", "lower"]` |
+| `min_hours_after` | Hours that must pass after a session carrying a given tag |
+| `max_per_day` | Cap on sessions from one spec in a day; `0` means no cap |
+
+Tagging is per rule, so a rule whose `rotate` mixes session types cannot be tagged honestly —
+split it. Upper and lower lifts are two rules for exactly this reason, which lets intervals
+declare `{"lower": 24}` and find their own day instead of being pinned to one by hand.
+
+A protected rest day needs no feature: leave the day out of `days`.
+
 ### Conflict avoidance
 
 `avoid_conflicts` (default `true`) keeps a rule off anything already scheduled: upstream lectures,

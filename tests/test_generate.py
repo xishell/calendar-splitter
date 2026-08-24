@@ -314,3 +314,81 @@ def test_without_a_fallback_a_blocked_window_drops_the_session(tmp_path):
     spec = _spec(tmp_path, {"feed": "G", "rules": [_fb(fallback_window=None)]})[0]
     busy = [(_at(d, 6), _at(d, 12)) for d in (7, 8, 9, 10, 11)]
     assert generate_feed(spec, busy) == []
+
+
+# ── scored placement ────────────────────────────────────
+
+
+def test_prefer_late_packs_toward_the_end_of_the_window(tmp_path):
+    rule = _gym(prefer="late", per_week=1, days=["mon"])[1]
+    spec = _spec(tmp_path, {"feed": "G", "rules": [rule]})[0]
+    slot = generate_feed(spec, [])[0]
+    assert slot.end == _at(7, 20)
+
+
+def test_min_gap_stops_sessions_running_back_to_back(tmp_path):
+    spec = _spec(tmp_path, {"feed": "G", "rules": [
+        {"kind": "recurring", "summary": "Lift", "from": "2026-09-07", "until": "2026-09-07",
+         "days": ["mon"], "window": ["16:00", "22:00"], "duration_min": 60, "per_week": 1},
+        {"kind": "recurring", "summary": "Run", "from": "2026-09-07", "until": "2026-09-07",
+         "days": ["mon"], "window": ["16:00", "22:00"], "duration_min": 30, "per_week": 1,
+         "min_gap_min": 45},
+    ]})[0]
+    lift, run = generate_feed(spec, [])
+    assert (run.start - lift.end) >= timedelta(minutes=45)
+
+
+def test_clearance_breaks_ties_within_the_preferred_hour(tmp_path):
+    """Two starts in the same hour: take the one with more room around it."""
+    rule = _gym(per_week=1, days=["mon"], duration_min=30)[1]
+    rule["window"] = ["17:00", "18:00"]
+    spec = _spec(tmp_path, {"feed": "G", "rules": [rule]})[0]
+    # something ends at 17:00, so starting at 17:00 has zero clearance
+    slot = generate_feed(spec, [(_at(7, 16), _at(7, 17))])[0]
+    assert slot.start > _at(7, 17)
+
+
+# ── recovery ────────────────────────────────────────────
+
+
+def test_recovery_keeps_intervals_clear_of_a_lower_day(tmp_path):
+    spec = _spec(tmp_path, {"feed": "G", "rules": [
+        {"kind": "recurring", "summary": "Lower", "from": "2026-09-07", "until": "2026-09-11",
+         "days": ["mon"], "window": ["07:00", "12:00"], "duration_min": 60, "per_week": 1,
+         "tags": ["lower"]},
+        {"kind": "recurring", "summary": "Intervals", "from": "2026-09-07", "until": "2026-09-11",
+         "days": ["mon", "tue", "wed", "thu", "fri"],
+         "window": ["07:00", "12:00"], "duration_min": 45, "per_week": 1,
+         "min_hours_after": {"lower": 36}},
+    ]})[0]
+    lower, intervals = generate_feed(spec, [])
+    assert lower.start.day == 7
+    assert (intervals.start - lower.end) >= timedelta(hours=36)
+
+
+def test_untagged_sessions_are_unaffected_by_recovery(tmp_path):
+    spec = _spec(tmp_path, {"feed": "G", "rules": [
+        {"kind": "recurring", "summary": "Lower", "from": "2026-09-07", "until": "2026-09-08",
+         "days": ["mon"], "window": ["07:00", "12:00"], "duration_min": 60, "per_week": 1,
+         "tags": ["lower"]},
+        {"kind": "recurring", "summary": "Study", "from": "2026-09-07", "until": "2026-09-08",
+         "days": ["mon"], "window": ["07:00", "12:00"], "duration_min": 60, "per_week": 1},
+    ]})[0]
+    assert len(generate_feed(spec, [])) == 2
+
+
+def test_max_per_day_caps_sessions_across_rules(tmp_path):
+    """A rule is already one-per-day, so the cap only bites when rules stack on a day."""
+    rules = [
+        {"kind": "recurring", "summary": f"S{i}", "from": "2026-09-07", "until": "2026-09-07",
+         "days": ["mon"], "window": ["07:00", "22:00"], "duration_min": 30, "per_week": 1,
+         "max_per_day": 2}
+        for i in range(3)
+    ]
+    spec = _spec(tmp_path, {"feed": "G", "rules": rules})[0]
+    assert len(generate_feed(spec, [])) == 2
+
+
+def test_rejects_a_bad_prefer_value(tmp_path):
+    with pytest.raises(ConfigError, match="prefer must be"):
+        _spec(tmp_path, {"feed": "X", "rules": [_gym(prefer="whenever")[1]]})

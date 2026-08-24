@@ -29,6 +29,15 @@ _WINDOW_PARTS = 2
 
 
 @dataclass(frozen=True)
+class Placed:
+    """A session already on the calendar, with what it was, for recovery checks."""
+
+    start: datetime
+    end: datetime
+    tags: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
 class Slot:
     """A generated event, before it becomes ICS."""
 
@@ -65,6 +74,17 @@ class Rule:
     avoid_conflicts: bool = True
     # minutes each way; the event shows the session, the busy interval covers the journey
     travel_min: int = 0
+
+    # "early" packs toward the start of the window, "late" toward the end
+    prefer: str = "early"
+    # breathing room required either side of anything already scheduled
+    min_gap_min: int = 0
+    # what this session is, for recovery purposes: e.g. ["lower", "hard"]
+    tags: tuple[str, ...] = ()
+    # hours that must pass after a session carrying the given tag
+    min_hours_after: dict[str, float] = field(default_factory=dict)
+    # cap on sessions from this spec in one day; 0 means no cap
+    max_per_day: int = 0
 
 
 @dataclass
@@ -118,8 +138,15 @@ def _parse_rule(raw: dict[str, Any], where: str) -> Rule:
         rotate=list(raw.get("rotate", [])),
         avoid_conflicts=bool(raw.get("avoid_conflicts", True)),
         travel_min=int(raw.get("travel_min", 0)),
+        prefer=raw.get("prefer", "early"),
+        min_gap_min=int(raw.get("min_gap_min", 0)),
+        tags=tuple(raw.get("tags", [])),
+        min_hours_after={k: float(v) for k, v in raw.get("min_hours_after", {}).items()},
+        max_per_day=int(raw.get("max_per_day", 0)),
     )
 
+    if rule.prefer not in ("early", "late"):
+        raise ConfigError(f"{where}: prefer must be 'early' or 'late', got {rule.prefer!r}")
     if kind == "fixed" and not (rule.start and rule.end):
         raise ConfigError(f"{where}: fixed rule needs start and end")
     if kind == "recurring":
@@ -186,33 +213,91 @@ def _weeks(since: date, until: date) -> list[date]:
     return out
 
 
-def _place_one(
+def _clearance(start: datetime, end: datetime, busy: list[tuple[datetime, datetime]]) -> float:
+    """Minutes to the nearest scheduled thing. Higher means more breathing room."""
+    gaps = []
+    for b_start, b_end in busy:
+        if b_start >= end:
+            gaps.append((b_start - end).total_seconds() / 60)
+        elif b_end <= start:
+            gaps.append((start - b_end).total_seconds() / 60)
+    return min(gaps, default=24 * 60)
+
+
+def _recovered(rule: Rule, start: datetime, placed: list[Placed]) -> bool:
+    """True if enough time has passed since every session this rule needs to recover from."""
+    for tag, hours in rule.min_hours_after.items():
+        need = timedelta(hours=hours)
+        for prior in placed:
+            if tag in prior.tags and prior.end <= start and start - prior.end < need:
+                return False
+            # a later session must also respect the gap, or order of placement decides recovery
+            if tag in prior.tags and prior.start > start and prior.start - start < need:
+                return False
+    return True
+
+
+def _candidates(
     rule: Rule, day: date, win: tuple[str, str],
-    ctx: tuple[ZoneInfo, list[tuple[datetime, datetime]], str],
-) -> Slot | None:
-    """First free slot for one day inside one window, or None."""
-    tz, busy, label = ctx
+    ctx: tuple[ZoneInfo, list[tuple[datetime, datetime]], list[Placed]],
+) -> list[tuple[tuple[int, float, float], datetime]]:
+    """Every legal start on this day, keyed by how good it is. Lower key sorts better."""
+    tz, busy, placed = ctx
     duration = timedelta(minutes=rule.duration_min)
     travel = timedelta(minutes=rule.travel_min)
-    cursor = datetime.combine(day, time.fromisoformat(win[0]), tzinfo=tz)
-    latest = datetime.combine(day, time.fromisoformat(win[1]), tzinfo=tz) - duration
-    while cursor <= latest:
+    gap = timedelta(minutes=rule.min_gap_min)
+    w_start = datetime.combine(day, time.fromisoformat(win[0]), tzinfo=tz)
+    w_end = datetime.combine(day, time.fromisoformat(win[1]), tzinfo=tz)
+
+    if rule.max_per_day and sum(1 for p in placed if p.start.date() == day) >= rule.max_per_day:
+        return []
+
+    out = []
+    cursor = w_start
+    while cursor <= w_end - duration:
         finish = cursor + duration
-        if not (rule.avoid_conflicts and _overlaps(cursor - travel, finish + travel, busy)):
-            busy.append((cursor - travel, finish + travel))
-            return Slot(
-                summary=rule.summary.replace("{rotate}", label),
-                description=rule.description.replace("{rotate}", label),
-                start=cursor,
-                end=finish,
-                location=rule.location,
+        blocked = rule.avoid_conflicts and _overlaps(
+            cursor - travel - gap, finish + travel + gap, busy
+        )
+        if not blocked and _recovered(rule, cursor, placed):
+            offset = (cursor - w_start if rule.prefer == "early" else w_end - finish)
+            # hour buckets keep the time-of-day preference dominant; clearance breaks ties
+            # inside an hour, which is what stops sessions stacking back to back
+            key = (
+                int(offset.total_seconds() // 3600),
+                -_clearance(cursor, finish, busy),
+                offset.total_seconds(),
             )
+            out.append((key, cursor))
         cursor += _STEP
-    return None
+    return out
+
+
+def _place_one(
+    rule: Rule, day: date, win: tuple[str, str],
+    ctx: tuple[ZoneInfo, list[tuple[datetime, datetime]], list[Placed], str],
+) -> Slot | None:
+    """Best legal slot for one day inside one window, or None."""
+    tz, busy, placed, label = ctx
+    options = _candidates(rule, day, win, (tz, busy, placed))
+    if not options:
+        return None
+    _, start = min(options)
+    finish = start + timedelta(minutes=rule.duration_min)
+    travel = timedelta(minutes=rule.travel_min)
+    busy.append((start - travel, finish + travel))
+    placed.append(Placed(start, finish, rule.tags))
+    return Slot(
+        summary=rule.summary.replace("{rotate}", label),
+        description=rule.description.replace("{rotate}", label),
+        start=start,
+        end=finish,
+        location=rule.location,
+    )
 
 
 def _expand_recurring(
-    rule: Rule, tz: ZoneInfo, busy: list[tuple[datetime, datetime]]
+    rule: Rule, tz: ZoneInfo, busy: list[tuple[datetime, datetime]], placed: list[Placed]
 ) -> list[Slot]:
     since = date.fromisoformat(rule.since)
     until = date.fromisoformat(rule.until)
@@ -223,29 +308,29 @@ def _expand_recurring(
     for monday in _weeks(since, until):
         days = [monday + timedelta(days=_WEEKDAYS[d]) for d in rule.days]
         days = [d for d in days if since <= d <= until]
-        placed = 0
+        placed_this_week = 0
 
         # the preferred window gets every candidate day before the fallback is touched,
         # so "mornings where possible" does not collapse to "mornings on monday only"
         windows = [rule.window] + ([rule.fallback_window] if rule.fallback_window else [])
         for win in windows:
             for day in days:
-                if placed >= rule.per_week:
+                if placed_this_week >= rule.per_week:
                     break
                 label = rule.rotate[rotation % len(rule.rotate)] if rule.rotate else ""
-                slot = _place_one(rule, day, win, (tz, busy, label))
+                slot = _place_one(rule, day, win, (tz, busy, placed, label))
                 if slot is not None:
                     slots.append(slot)
                     rotation += 1
-                    placed += 1
-            if placed >= rule.per_week:
+                    placed_this_week += 1
+            if placed_this_week >= rule.per_week:
                 break
 
         full_week = monday >= since and monday + timedelta(days=6) <= until
-        if placed < rule.per_week and full_week:
+        if placed_this_week < rule.per_week and full_week:
             _log.warning(
                 "%r: only placed %d/%d in week of %s",
-                rule.summary, placed, rule.per_week, monday,
+                rule.summary, placed_this_week, rule.per_week, monday,
             )
     return slots
 
@@ -270,16 +355,22 @@ def _expand_fixed(rule: Rule, tz: ZoneInfo) -> list[Slot]:
     ]
 
 
-def generate_feed(spec: FeedSpec, busy: list[tuple[datetime, datetime]]) -> list[Slot]:
-    """Expand one spec into slots. Appends placements to busy so feeds don't collide."""
+def generate_feed(
+    spec: FeedSpec,
+    busy: list[tuple[datetime, datetime]],
+    placed: list[Placed] | None = None,
+) -> list[Slot]:
+    """Expand one spec into slots. Appends to busy and placed so later feeds see them."""
     slots: list[Slot] = []
+    placed = [] if placed is None else placed
     for rule in spec.rules:
         if rule.kind == "fixed":
             fixed = _expand_fixed(rule, spec.tz)
             slots.extend(fixed)
             travel = timedelta(minutes=rule.travel_min)
             busy.extend((s.start - travel, s.end + travel) for s in fixed)
+            placed.extend(Placed(s.start, s.end, rule.tags) for s in fixed)
         else:
-            slots.extend(_expand_recurring(rule, spec.tz, busy))
+            slots.extend(_expand_recurring(rule, spec.tz, busy, placed))
     _log.info("Generated %d event(s) for feed %s.", len(slots), spec.feed)
     return slots
