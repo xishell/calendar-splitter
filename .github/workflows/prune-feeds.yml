@@ -10,7 +10,7 @@ on:
       after_days:
         description: 'Remove feeds git has not seen change for this many days'
         type: string
-        default: '304'
+        default: '152'
   schedule:
     # 05:00 Europe/Stockholm on the 1st, an hour before the daily feed build
     - cron: '0 3 1 * *'
@@ -58,7 +58,7 @@ jobs:
           FEEDS_DIR: ${{ env.FEEDS_DIR }}
           TOKEN_MAP_PATH: ${{ env.TOKEN_MAP_PATH }}
           FEEDS_REPO_DIR: ${{ env.FEEDS_REPO_DIR }}
-          PRUNE_AFTER_DAYS: ${{ inputs.after_days || '304' }}
+          PRUNE_AFTER_DAYS: ${{ inputs.after_days || '152' }}
           PRUNE_DRY_RUN: ${{ inputs.dry_run }}
           LOG_LEVEL: INFO
         run: python -m calendar_splitter --prune-feeds

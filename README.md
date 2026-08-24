@@ -160,7 +160,7 @@ Available strategies: `time`, `description`, `location`, `url`, `all`, `any`.
 
 A feed nobody writes any more still sits on the site and still appears in the README as
 something to subscribe to. `--prune-feeds` removes any whose file git has not seen change for
-longer than `PRUNE_AFTER_DAYS` (304, ten months), and drops its token so the README stops
+longer than `PRUNE_AFTER_DAYS` (152, five months), and drops its token so the README stops
 listing it.
 
 Age is the signal rather than "absent from the last run", because a transient upstream failure
@@ -188,7 +188,7 @@ by hand.
 | `SPECS_DIR` | no | Directory of generated-feed specs (default: `specs`) |
 | `CAMPUS_TRAVEL_MIN` | no | Minutes each way to campus, reserved around upstream events |
 | `BUSY_EXCLUDE` | no | Course codes whose events should not reserve time |
-| `PRUNE_AFTER_DAYS` | no | Age at which a feed is pruned (default: `304`) |
+| `PRUNE_AFTER_DAYS` | no | Age at which a feed is pruned (default: `152`) |
 | `PRUNE_DRY_RUN` | no | Report what would be pruned without removing it |
 | `FEEDS_REPO_DIR` | no | Feeds repo root, needed for prune to read git history |
 

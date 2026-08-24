@@ -17,8 +17,8 @@ from calendar_splitter.logging import get_logger
 
 _log = get_logger(__name__)
 
-# ten months: long enough that a course is unambiguously over
-DEFAULT_MAX_AGE_DAYS = 304
+# five months: past the end of a KTH course and its retake window
+DEFAULT_MAX_AGE_DAYS = 152
 
 
 @dataclass(frozen=True)
