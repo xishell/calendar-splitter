@@ -92,3 +92,30 @@ class TestPipeline:
         assert not result.skipped
         # Should still detect courses from event summaries
         assert result.kept_events > 0
+
+
+class TestDroppedDiagnostics:
+    """A vanishing event is the failure mode hardest to notice, so it must be named."""
+
+    def test_records_events_with_no_course_code(self, tmp_path):
+        ics = tmp_path / "up.ics"
+        ics.write_bytes(b"""BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//t//EN
+BEGIN:VEVENT
+UID:x@x
+SUMMARY:Dentist appointment
+DTSTART:20260910T090000Z
+DTEND:20260910T100000Z
+END:VEVENT
+END:VCALENDAR
+""")
+        result = run_pipeline(PipelineConfig(
+            local_fallback=ics,
+            state_path=tmp_path / "state.json",
+            courses_dir=tmp_path / "courses",
+            feeds_dir=tmp_path / "feeds",
+            token_map_path=tmp_path / "tok.json",
+            specs_dir=tmp_path / "specs",
+        ))
+        assert ("Dentist appointment", "no course code detected") in result.dropped

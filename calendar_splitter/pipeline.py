@@ -51,6 +51,8 @@ class PipelineResult:
     filtered_events: int = 0
     generated_events: int = 0
     skipped: bool = False
+    # summary + reason for every event that did not make it into a feed
+    dropped: list[tuple[str, str]] = field(default_factory=list)
 
 
 def _add_generated_feeds(
@@ -104,6 +106,7 @@ def run_pipeline(config: PipelineConfig) -> PipelineResult:
     for event in events:
         course_code = detect_course_code(event.summary, event.description)
         if not course_code:
+            result.dropped.append((event.summary, "no course code detected"))
             continue
 
         course_config = courses.get(course_code)
@@ -114,6 +117,7 @@ def run_pipeline(config: PipelineConfig) -> PipelineResult:
         classified = classify_event(event, course_code, course_config)
         if classified is None:
             result.filtered_events += 1
+            result.dropped.append((event.summary, f"{course_code}: no matching event type"))
             continue
 
         new_summary, new_desc = rewrite_event(classified, course_config)
@@ -132,6 +136,12 @@ def run_pipeline(config: PipelineConfig) -> PipelineResult:
         result.filtered_events,
         len(buckets),
     )
+    # a silently vanishing event is the failure mode that is hardest to notice
+    for summary, reason in result.dropped:
+        if "no matching event type" in reason:
+            _log.info("Filtered %r (%s)", summary, reason)
+        else:
+            _log.debug("Dropped %r: %s", summary, reason)
 
     _add_generated_feeds(config, events, buckets, result)
 
