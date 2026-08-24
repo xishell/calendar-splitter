@@ -63,3 +63,36 @@ class TestParseCalendar:
         ev = events[0]
         assert "SUMMARY" not in ev.properties
         assert "DESCRIPTION" not in ev.properties
+
+
+class TestDatetimeNormalization:
+    """All-day and floating events must survive as aware datetimes."""
+
+    _ICS = b"""BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//t//EN
+BEGIN:VEVENT
+UID:allday@x
+SUMMARY:IS1200 field trip
+DTSTART;VALUE=DATE:20260910
+DTEND;VALUE=DATE:20260911
+END:VEVENT
+BEGIN:VEVENT
+UID:floating@x
+SUMMARY:IS1200 floating
+DTSTART:20260910T090000
+DTEND:20260910T100000
+END:VEVENT
+END:VCALENDAR
+"""
+
+    def test_all_day_event_gets_a_datetime(self):
+        ev = next(e for e in parse_calendar(self._ICS) if e.uid == "allday@x")
+        assert ev.start is not None
+        assert ev.start.hour == 0
+        assert ev.start.tzinfo is not None
+
+    def test_floating_event_becomes_aware(self):
+        ev = next(e for e in parse_calendar(self._ICS) if e.uid == "floating@x")
+        assert ev.start is not None and ev.start.tzinfo is not None
+        assert ev.start.hour == 9

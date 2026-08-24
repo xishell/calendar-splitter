@@ -2,14 +2,19 @@
 
 from __future__ import annotations
 
+import os
 import re
-from datetime import datetime
+from datetime import date, datetime, time
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from icalendar import Calendar
 
 from calendar_splitter.core.models import Event
 from calendar_splitter.exceptions import ParseError
+
+# floating and all-day events have no zone of their own; the upstream is a KTH feed
+LOCAL_TZ = ZoneInfo(os.environ.get("CALENDAR_TZ", "Europe/Stockholm"))
 
 # Course code detection patterns (ordered by specificity)
 _RE_KTH_STYLE = re.compile(r"\b([A-Z]{2}\d{4})\b")
@@ -91,10 +96,18 @@ def parse_calendar_raw(data: bytes) -> Any:
 
 
 def _extract_datetime(dt_prop: object) -> datetime | None:
-    """Extract a datetime from an icalendar property."""
+    """Extract a timezone-aware datetime from an icalendar property.
+
+    All-day events carry a bare date and floating events carry a naive datetime.
+    Both used to leak out untouched, which dropped them from conflict checks or
+    blew up on comparison against aware datetimes.
+    """
     if dt_prop is None:
         return None
     dt_value = dt_prop.dt if hasattr(dt_prop, "dt") else dt_prop
+    # datetime is a subclass of date, so it has to be tested first
     if isinstance(dt_value, datetime):
-        return dt_value
+        return dt_value if dt_value.tzinfo else dt_value.replace(tzinfo=LOCAL_TZ)
+    if isinstance(dt_value, date):
+        return datetime.combine(dt_value, time.min, tzinfo=LOCAL_TZ)
     return None
