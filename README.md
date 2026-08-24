@@ -18,7 +18,8 @@ Built for KTH calendars but works with any ICS source where events contain cours
 ## Generated feeds
 
 Course feeds are reshaped from upstream. Study blocks, workouts and meal prep have no upstream
-event, so they are authored from a spec in `specs/`:
+event, so they are authored from a spec. Specs live in the feeds repository beside the course
+configs — `events/` holds one JSON per course, `specs/` one per generated feed:
 
 ```json
 {
@@ -131,6 +132,7 @@ Available strategies: `time`, `description`, `location`, `url`, `all`, `any`.
 | `LOCAL_UPSTREAM_ICS` | no | Local ICS fallback path (default: `personal.ics`) |
 | `COURSES_DIR` | no | Directory of course config JSONs (default: `courses`) |
 | `SPECS_DIR` | no | Directory of generated-feed specs (default: `specs`) |
+
 | `UPSTREAM_STATE_PATH` | no | Cache state file (default: `_feeds/upstream_state.json`) |
 | `LOG_LEVEL` | no | Logging level (default: `INFO`) |
 

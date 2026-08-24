@@ -12,7 +12,7 @@ permissions:
 env:
   FEEDS_DIR: _feeds/docs/feeds
   COURSES_DIR: _feeds/events
-  SPECS_DIR: specs
+  SPECS_DIR: _feeds/specs
   TOKEN_MAP_PATH: _feeds/token_map.json
   UPSTREAM_STATE_PATH: _feeds/upstream_state.json
   PYTHONUNBUFFERED: '1'
