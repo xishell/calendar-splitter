@@ -392,3 +392,80 @@ def test_max_per_day_caps_sessions_across_rules(tmp_path):
 def test_rejects_a_bad_prefer_value(tmp_path):
     with pytest.raises(ConfigError, match="prefer must be"):
         _spec(tmp_path, {"feed": "X", "rules": [_gym(prefer="whenever")[1]]})
+
+
+# ── waking hours ────────────────────────────────────────
+
+
+def _late(**over):
+    payload = {"feed": "M", "day_start": "06:15", "day_end": "22:00", "rules": [
+        {"kind": "recurring", "summary": "Oats", "from": "2026-09-07", "until": "2026-09-07",
+         "days": ["mon"], "window": ["21:30", "23:00"], "duration_min": 15, "per_week": 1}]}
+    payload.update(over)
+    return payload
+
+
+def test_window_is_pulled_inside_waking_hours(tmp_path):
+    spec = _spec(tmp_path, _late())[0]
+    assert spec.rules[0].window == ("21:30", "22:00")
+
+
+def test_nothing_is_scheduled_past_bedtime(tmp_path):
+    spec = _spec(tmp_path, _late())[0]
+    slot = generate_feed(spec, [])[0]
+    assert slot.end <= _at(7, 22)
+
+
+def test_early_edge_is_clamped_too(tmp_path):
+    payload = _late()
+    payload["rules"][0]["window"] = ["04:00", "09:00"]
+    spec = _spec(tmp_path, payload)[0]
+    assert spec.rules[0].window == ("06:15", "09:00")
+
+
+def test_fixed_events_are_never_clamped(tmp_path):
+    """A 05:00 flight is a real commitment; the tool does not get to move it."""
+    spec = _spec(tmp_path, {"feed": "M", "day_start": "06:15", "day_end": "22:00", "rules": [
+        {"kind": "fixed", "summary": "Flight", "start": "2026-09-07T05:00",
+         "end": "2026-09-07T07:00"}]})[0]
+    slot = generate_feed(spec, [])[0]
+    assert slot.start.hour == 5
+
+
+def test_no_waking_hours_means_no_clamping(tmp_path):
+    spec = _spec(tmp_path, {"feed": "M", "rules": [
+        {"kind": "recurring", "summary": "X", "from": "2026-09-07", "until": "2026-09-07",
+         "days": ["mon"], "window": ["04:00", "23:30"], "duration_min": 15, "per_week": 1}]})[0]
+    assert spec.rules[0].window == ("04:00", "23:30")
+
+
+def test_per_day_cap_counts_only_its_own_feed(tmp_path):
+    """Another feed's sessions must not consume this feed's daily allowance."""
+    (tmp_path / "a.json").write_text(json.dumps({"feed": "GYM", "priority": 10, "rules": [
+        {"kind": "recurring", "summary": "Lift", "from": "2026-09-07", "until": "2026-09-07",
+         "days": ["mon"], "window": ["07:00", "12:00"], "duration_min": 60, "per_week": 1}]}))
+    (tmp_path / "b.json").write_text(json.dumps({"feed": "MOB", "priority": 20, "rules": [
+        {"kind": "recurring", "summary": "Mobility", "from": "2026-09-07", "until": "2026-09-07",
+         "days": ["mon"], "window": ["07:00", "12:00"], "duration_min": 20, "per_week": 1,
+         "max_per_day": 1}]}))
+    gym, mob = load_specs(tmp_path)
+    busy, placed = [], []
+    assert len(generate_feed(gym, busy, placed)) == 1
+    assert len(generate_feed(mob, busy, placed)) == 1   # cap is MOB's own, not GYM's
+
+
+def test_recovery_tags_do_cross_feeds(tmp_path):
+    (tmp_path / "a.json").write_text(json.dumps({"feed": "GYM", "priority": 10, "rules": [
+        {"kind": "recurring", "summary": "Squat", "from": "2026-09-07", "until": "2026-09-11",
+         "days": ["mon"], "window": ["07:00", "12:00"], "duration_min": 60, "per_week": 1,
+         "tags": ["lower"]}]}))
+    (tmp_path / "b.json").write_text(json.dumps({"feed": "RUN", "priority": 20, "rules": [
+        {"kind": "recurring", "summary": "Intervals", "from": "2026-09-07", "until": "2026-09-11",
+         "days": ["mon", "tue", "wed", "thu", "fri"],
+         "window": ["07:00", "12:00"], "duration_min": 45, "per_week": 1,
+         "min_hours_after": {"lower": 24}}]}))
+    gym, run = load_specs(tmp_path)
+    busy, placed = [], []
+    squat = generate_feed(gym, busy, placed)[0]
+    intervals = generate_feed(run, busy, placed)[0]
+    assert (intervals.start - squat.end) >= timedelta(hours=24)

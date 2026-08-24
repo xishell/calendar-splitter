@@ -35,6 +35,8 @@ class Placed:
     start: datetime
     end: datetime
     tags: tuple[str, ...] = ()
+    # recovery tags apply across every feed, but a per-day cap is about one feed only
+    feed: str = ""
 
 
 @dataclass(frozen=True)
@@ -85,6 +87,8 @@ class Rule:
     min_hours_after: dict[str, float] = field(default_factory=dict)
     # cap on sessions from this spec in one day; 0 means no cap
     max_per_day: int = 0
+    # set from the spec at load time so a cap counts only its own feed
+    feed: str = ""
 
 
 @dataclass
@@ -98,6 +102,9 @@ class FeedSpec:
     priority: int = 50
     # CSS name or #rrggbb; clients that honour it colour the whole subscription
     color: str = ""
+    # waking hours; every rule window is clamped to this so nothing lands while asleep
+    day_start: str = ""
+    day_end: str = ""
     rules: list[Rule] = field(default_factory=list)
 
     @property
@@ -181,6 +188,8 @@ def load_specs(specs_dir: Path) -> list[FeedSpec]:
                 name=raw.get("name", raw["feed"]),
                 timezone=raw.get("timezone", "Europe/Stockholm"),
                 priority=int(raw.get("priority", 50)),
+                day_start=raw.get("day_start", ""),
+                day_end=raw.get("day_end", ""),
                 color=raw.get("color", ""),
                 rules=[
                     _parse_rule(r, f"{path.name}[{i}]")
@@ -188,6 +197,10 @@ def load_specs(specs_dir: Path) -> list[FeedSpec]:
                 ],
             )
         )
+    for spec in specs:
+        for rule in spec.rules:
+            rule.feed = spec.feed
+        _clamp_to_waking_hours(spec)
     specs.sort(key=lambda s: (s.priority, s.feed))
     _log.info("Loaded %d generated feed spec(s).", len(specs))
     return specs
@@ -197,6 +210,25 @@ def slug(text: str) -> str:
     """Lowercase ascii-ish slug, used to build stable event uids."""
     text = text.lower().translate(str.maketrans("åäöéèü", "aaoeeu"))
     return re.sub(r"[^a-z0-9]+", "-", text).strip("-")[:40]
+
+
+def _clamp_to_waking_hours(spec: FeedSpec) -> None:
+    """Pull every rule window inside the spec's waking hours."""
+    if not (spec.day_start or spec.day_end):
+        return
+    lo = time.fromisoformat(spec.day_start) if spec.day_start else time.min
+    hi = time.fromisoformat(spec.day_end) if spec.day_end else time.max
+
+    def clamp(win: tuple[str, str]) -> tuple[str, str]:
+        a, b = time.fromisoformat(win[0]), time.fromisoformat(win[1])
+        return (max(a, lo).isoformat("minutes"), min(b, hi).isoformat("minutes"))
+
+    for rule in spec.rules:
+        if rule.kind != "recurring":
+            continue          # a fixed event is a real commitment, not ours to move
+        rule.window = clamp(rule.window)
+        if rule.fallback_window:
+            rule.fallback_window = clamp(rule.fallback_window)
 
 
 def _overlaps(start: datetime, end: datetime, busy: list[tuple[datetime, datetime]]) -> bool:
@@ -249,8 +281,10 @@ def _candidates(
     w_start = datetime.combine(day, time.fromisoformat(win[0]), tzinfo=tz)
     w_end = datetime.combine(day, time.fromisoformat(win[1]), tzinfo=tz)
 
-    if rule.max_per_day and sum(1 for p in placed if p.start.date() == day) >= rule.max_per_day:
-        return []
+    if rule.max_per_day and rule.feed:
+        today = sum(1 for p in placed if p.start.date() == day and p.feed == rule.feed)
+        if today >= rule.max_per_day:
+            return []
 
     out = []
     cursor = w_start
@@ -286,7 +320,7 @@ def _place_one(
     finish = start + timedelta(minutes=rule.duration_min)
     travel = timedelta(minutes=rule.travel_min)
     busy.append((start - travel, finish + travel))
-    placed.append(Placed(start, finish, rule.tags))
+    placed.append(Placed(start, finish, rule.tags, rule.feed))
     return Slot(
         summary=rule.summary.replace("{rotate}", label),
         description=rule.description.replace("{rotate}", label),
@@ -369,7 +403,7 @@ def generate_feed(
             slots.extend(fixed)
             travel = timedelta(minutes=rule.travel_min)
             busy.extend((s.start - travel, s.end + travel) for s in fixed)
-            placed.extend(Placed(s.start, s.end, rule.tags) for s in fixed)
+            placed.extend(Placed(s.start, s.end, rule.tags, rule.feed) for s in fixed)
         else:
             slots.extend(_expand_recurring(rule, spec.tz, busy, placed))
     _log.info("Generated %d event(s) for feed %s.", len(slots), spec.feed)

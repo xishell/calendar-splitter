@@ -20,7 +20,7 @@ from calendar_splitter.core.writer import (
     new_calendar,
 )
 from calendar_splitter.fetch import fetch_upstream
-from calendar_splitter.generate import generate_feed, load_specs, slug
+from calendar_splitter.generate import Placed, generate_feed, load_specs, slug
 from calendar_splitter.logging import get_logger, redact
 from calendar_splitter.strategies import classify_event
 from calendar_splitter.tokens import TokenStore
@@ -82,8 +82,9 @@ def _add_generated_feeds(
     if dropped:
         _log.info("Ignored %d event(s) from %s when placing generated feeds.",
                   dropped, ", ".join(sorted(skip)))
+    placed: list[Placed] = []
     for spec in load_specs(config.specs_dir):
-        slots = generate_feed(spec, busy)
+        slots = generate_feed(spec, busy, placed)
         if not slots:
             continue
         cal = new_calendar(spec.name or spec.feed, color=spec.color)

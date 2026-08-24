@@ -65,7 +65,18 @@ stacking back to back.
 | `min_gap_min` | Breathing room required either side of anything already scheduled |
 | `tags` | What a session is, e.g. `["lift", "lower"]` |
 | `min_hours_after` | Hours that must pass after a session carrying a given tag |
-| `max_per_day` | Cap on sessions from one spec in a day; `0` means no cap |
+| `max_per_day` | Cap on sessions from **this feed** in a day; `0` means no cap |
+
+Recovery tags cross feeds — a lower day is a lower day whether it came from `GYM.json` or
+anywhere else — while `max_per_day` counts only its own feed, so a morning lift does not consume
+the mobility allowance.
+
+### Waking hours
+
+A spec can declare `day_start` and `day_end`. Every recurring rule window is clamped to them at
+load time, so nothing is scheduled while you are asleep and the bound lives in one place rather
+than in every rule. Fixed events are never clamped: a 05:00 flight is a real commitment, not
+something the tool gets to move.
 
 Tagging is per rule, so a rule whose `rotate` mixes session types cannot be tagged honestly —
 split it. Upper and lower lifts are two rules for exactly this reason, which lets intervals
