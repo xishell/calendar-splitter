@@ -67,7 +67,8 @@ class PipelineResult:
 def _fetch(config: PipelineConfig, config_digest: str) -> bytes | None:
     """Upstream bytes, rebuilding when either the feed or the config has moved."""
     previous = _read_config_digest(config.state_path)
-    config_changed = previous is not None and previous != config_digest
+    # a missing digest means this state predates config tracking, so rebuild once
+    config_changed = previous != config_digest
     if config_changed:
         _log.info("Course or spec config changed; rebuilding regardless of upstream.")
     return fetch_upstream(
@@ -152,6 +153,8 @@ def run_pipeline(config: PipelineConfig) -> PipelineResult:
     upstream = _fetch(config, config_digest)
     if upstream is None:
         _log.info("Upstream unchanged, nothing to do.")
+        # record it even on a skip, or every later run would think it had changed
+        _write_config_digest(config.state_path, config_digest)
         return PipelineResult(skipped=True)
 
     # Load configs
