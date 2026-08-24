@@ -60,6 +60,8 @@ class Rule:
     per_week: int = 1
     rotate: list[str] = field(default_factory=list)
     avoid_conflicts: bool = True
+    # minutes each way; the event shows the session, the busy interval covers the journey
+    travel_min: int = 0
 
 
 @dataclass
@@ -111,6 +113,7 @@ def _parse_rule(raw: dict[str, Any], where: str) -> Rule:
         per_week=int(raw.get("per_week", 1)),
         rotate=list(raw.get("rotate", [])),
         avoid_conflicts=bool(raw.get("avoid_conflicts", True)),
+        travel_min=int(raw.get("travel_min", 0)),
     )
 
     if kind == "fixed" and not (rule.start and rule.end):
@@ -196,9 +199,10 @@ def _expand_recurring(
 
             latest = datetime.combine(day, w_end, tzinfo=tz) - duration
             cursor = datetime.combine(day, w_start, tzinfo=tz)
+            travel = timedelta(minutes=rule.travel_min)
             while cursor <= latest:
                 finish = cursor + duration
-                if not (rule.avoid_conflicts and _overlaps(cursor, finish, busy)):
+                if not (rule.avoid_conflicts and _overlaps(cursor - travel, finish + travel, busy)):
                     label = rule.rotate[rotation % len(rule.rotate)] if rule.rotate else ""
                     slots.append(
                         Slot(
@@ -209,7 +213,7 @@ def _expand_recurring(
                             location=rule.location,
                         )
                     )
-                    busy.append((cursor, finish))
+                    busy.append((cursor - travel, finish + travel))
                     rotation += 1
                     placed += 1
                     break
@@ -254,7 +258,8 @@ def generate_feed(spec: FeedSpec, busy: list[tuple[datetime, datetime]]) -> list
         if rule.kind == "fixed":
             fixed = _expand_fixed(rule, spec.tz)
             slots.extend(fixed)
-            busy.extend((s.start, s.end) for s in fixed)
+            travel = timedelta(minutes=rule.travel_min)
+            busy.extend((s.start - travel, s.end + travel) for s in fixed)
         else:
             slots.extend(_expand_recurring(rule, spec.tz, busy))
     _log.info("Generated %d event(s) for feed %s.", len(slots), spec.feed)

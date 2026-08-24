@@ -64,6 +64,7 @@ def main() -> int:
         feeds_dir=Path(feeds_dir),
         token_map_path=Path(token_map_path),
         specs_dir=Path(specs_dir),
+        campus_travel_min=int(os.environ.get("CAMPUS_TRAVEL_MIN", "0")),
         timeout=int(os.environ.get("FETCH_TIMEOUT", "30")),
     )
 

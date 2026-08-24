@@ -240,3 +240,37 @@ END:VCALENDAR
     probe_s = datetime(2026, 9, 10, 9, 30, tzinfo=TZ)
     probe_e = datetime(2026, 9, 10, 10, 30, tzinfo=TZ)
     assert _overlaps(probe_s, probe_e, busy) is True
+
+
+def test_travel_pads_the_busy_interval_not_the_event(tmp_path):
+    rule = _gym(travel_min=30, per_week=1, days=["mon"])[1]
+    spec = _spec(tmp_path, {"feed": "GYM", "rules": [rule]})[0]
+    busy = []
+    slots = generate_feed(spec, busy)
+    # the event is the session itself
+    assert slots[0].end - slots[0].start == timedelta(minutes=90)
+    # but half an hour either side is reserved
+    assert busy[0][0] == slots[0].start - timedelta(minutes=30)
+    assert busy[0][1] == slots[0].end + timedelta(minutes=30)
+
+
+def test_travel_keeps_a_later_session_clear_of_the_journey(tmp_path):
+    spec = _spec(tmp_path, {"feed": "X", "rules": [
+        {"kind": "recurring", "summary": "Sailing", "from": "2026-09-07", "until": "2026-09-07",
+         "days": ["mon"], "window": ["17:00", "20:00"], "duration_min": 180,
+         "per_week": 1, "travel_min": 40},
+        {"kind": "recurring", "summary": "Lift", "from": "2026-09-07", "until": "2026-09-07",
+         "days": ["mon"], "window": ["16:00", "23:00"], "duration_min": 60, "per_week": 1},
+    ]})[0]
+    slots = generate_feed(spec, [])
+    sail, lift = slots[0], slots[1]
+    assert sail.start.hour == 17 and sail.end.hour == 20
+    # 40 min home from sailing, so the lift cannot start before 20:40
+    assert lift.start >= sail.end + timedelta(minutes=40)
+
+
+def test_travel_defaults_to_zero(tmp_path):
+    spec = _spec(tmp_path, {"feed": "X", "rules": [_gym(per_week=1, days=["mon"])[1]]})[0]
+    busy = []
+    slots = generate_feed(spec, busy)
+    assert busy[0] == (slots[0].start, slots[0].end)

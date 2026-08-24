@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import timedelta
 from pathlib import Path
 from typing import Any
 
@@ -38,6 +39,8 @@ class PipelineConfig:
     feeds_dir: Path = Path("_feeds")
     token_map_path: Path = Path("_feeds/tokens.json")
     specs_dir: Path = Path("specs")
+    # minutes each way to campus; upstream lectures reserve this around themselves
+    campus_travel_min: int = 0
     timeout: int = 30
 
 
@@ -62,7 +65,8 @@ def _add_generated_feeds(
     result: PipelineResult,
 ) -> None:
     """Expand specs into feeds, treating upstream events as the busy set."""
-    busy = [(e.start, e.end) for e in events if e.start and e.end]
+    pad = timedelta(minutes=config.campus_travel_min)
+    busy = [(e.start - pad, e.end + pad) for e in events if e.start and e.end]
     for spec in load_specs(config.specs_dir):
         slots = generate_feed(spec, busy)
         if not slots:

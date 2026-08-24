@@ -119,3 +119,34 @@ END:VCALENDAR
             specs_dir=tmp_path / "specs",
         ))
         assert ("Dentist appointment", "no course code detected") in result.dropped
+
+
+def test_campus_travel_pads_upstream_events(tmp_path):
+    """A lecture reserves the journey either side, so nothing is scheduled on top of it."""
+    ics = tmp_path / "up.ics"
+    ics.write_bytes(b"""BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//t//EN
+BEGIN:VEVENT
+UID:lec@x
+SUMMARY:IS1200 Lecture 1
+DTSTART:20260907T080000Z
+DTEND:20260907T100000Z
+END:VEVENT
+END:VCALENDAR
+""")
+    specs = tmp_path / "specs"
+    specs.mkdir()
+    (specs / "s.json").write_text(json.dumps({"feed": "S", "rules": [
+        {"kind": "recurring", "summary": "Study", "from": "2026-09-07", "until": "2026-09-07",
+         "days": ["mon"], "window": ["06:00", "18:00"], "duration_min": 60, "per_week": 1}]}))
+
+    def run(travel):
+        return run_pipeline(PipelineConfig(
+            local_fallback=ics, state_path=tmp_path / f"st{travel}.json",
+            courses_dir=tmp_path / "c", feeds_dir=tmp_path / f"f{travel}",
+            token_map_path=tmp_path / f"t{travel}.json", specs_dir=specs,
+            campus_travel_min=travel))
+
+    assert run(0).generated_events == 1
+    assert run(45).generated_events == 1  # still placed, just pushed clear of the journey
