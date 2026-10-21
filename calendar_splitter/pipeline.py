@@ -81,12 +81,17 @@ def _fetch(config: PipelineConfig, config_digest: str) -> bytes | None:
 
 
 def _config_digest(config: PipelineConfig) -> str:
-    """Fingerprint of every config file, so an edit forces a rebuild."""
+    """Fingerprint of every config file and the splitter source, so an edit forces a rebuild."""
     h = hashlib.sha256()
     for d in (config.courses_dir, config.specs_dir):
         for path in sorted(d.glob("*.json")) if d.is_dir() else []:
             h.update(path.name.encode())
             h.update(path.read_bytes())
+    # output format lives in the code, so a code change must reach the feeds too
+    src = Path(__file__).parent
+    for path in sorted(src.rglob("*.py")):
+        h.update(str(path.relative_to(src)).encode())
+        h.update(path.read_bytes())
     return h.hexdigest()
 
 

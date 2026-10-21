@@ -81,6 +81,25 @@ class TestPipeline:
         result = run_pipeline(config)
         assert result.skipped is True
 
+    def test_code_change_forces_rebuild(self, tmp_path, monkeypatch):
+        from calendar_splitter import pipeline
+
+        pkg = tmp_path / "pkg"
+        pkg.mkdir()
+        (pkg / "writer.py").write_text("v1", encoding="utf-8")
+        monkeypatch.setattr(pipeline, "__file__", str(pkg / "pipeline.py"))
+        config = PipelineConfig(
+            source_url="",
+            local_fallback=tmp_path / "none.ics",
+            state_path=tmp_path / "state.json",
+            courses_dir=tmp_path / "courses",
+            feeds_dir=tmp_path / "feeds",
+            token_map_path=tmp_path / "tokens.json",
+        )
+        before = pipeline._config_digest(config)
+        (pkg / "writer.py").write_text("v2", encoding="utf-8")
+        assert pipeline._config_digest(config) != before
+
     def test_pipeline_without_configs(self, tmp_path):
         ics_file = tmp_path / "upstream.ics"
         ics_file.write_bytes(SAMPLE_ICS_BYTES)
