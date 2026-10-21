@@ -189,7 +189,7 @@ def run_pipeline(config: PipelineConfig) -> PipelineResult:
         ical_event = build_event(classified, new_summary, new_desc)
 
         if course_code not in buckets:
-            buckets[course_code] = (clone_calendar_base(raw_cal, course_code), [])
+            buckets[course_code] = (clone_calendar_base(raw_cal, f"KTH-{course_code}"), [])
         cal, _ = buckets[course_code]
         cal.add_component(ical_event)
         result.kept_events += 1

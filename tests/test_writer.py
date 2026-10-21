@@ -21,9 +21,10 @@ class TestCloneCalendarBase:
         src.add("VERSION", "2.0")
         src.add("CALSCALE", "GREGORIAN")
 
-        dst = clone_calendar_base(src, "IS1200")
+        dst = clone_calendar_base(src, "KTH-IS1200")
         assert str(dst.get("PRODID")) == "-//Test//EN"
-        assert str(dst.get("X-WR-CALNAME")) == "IS1200"
+        assert str(dst.get("NAME")) == "KTH-IS1200"
+        assert str(dst.get("X-WR-CALNAME")) == "KTH-IS1200"
 
     def test_skips_missing_keys(self):
         src = Calendar()
@@ -66,6 +67,7 @@ class TestGeneratedCalendar:
     def test_no_colour_properties_when_unset(self):
         ical = new_calendar("Plain").to_ical().decode()
         assert "X-APPLE-CALENDAR-COLOR" not in ical
+        assert "NAME:Plain" in ical
 
     def test_colour_written_for_both_client_families(self):
         ical = new_calendar("Study", color="#444a95").to_ical().decode()

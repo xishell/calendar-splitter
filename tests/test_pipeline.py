@@ -51,6 +51,11 @@ class TestPipeline:
         tokens = json.loads(token_path.read_text(encoding="utf-8"))
         assert "IS1200" in tokens
 
+        # feed file keeps the bare code, only the display name gets the prefix
+        is1200 = Calendar.from_ical(next(feeds_dir.glob("IS1200--*.ics")).read_bytes())
+        assert str(is1200.get("NAME")) == "KTH-IS1200"
+        assert str(is1200.get("X-WR-CALNAME")) == "KTH-IS1200"
+
     def test_pipeline_skips_unchanged(self, tmp_path, sample_course_config_dict):
         ics_file = tmp_path / "upstream.ics"
         ics_file.write_bytes(SAMPLE_ICS_BYTES)

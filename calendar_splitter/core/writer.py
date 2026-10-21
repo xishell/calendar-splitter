@@ -15,6 +15,8 @@ def clone_calendar_base(src_cal: Any, name: str) -> Any:
     for key in ("PRODID", "VERSION", "CALSCALE", "METHOD", "X-WR-CALDESC", "X-PUBLISHED-TTL"):
         if key in src_cal:
             dst.add(key, src_cal.get(key))
+    # rfc 7986 NAME for proton and newer clients, X-WR-CALNAME for apple and google
+    dst.add("NAME", vText(name))
     dst.add("X-WR-CALNAME", vText(name))
     return dst
 
@@ -55,6 +57,7 @@ def new_calendar(name: str, color: str = "") -> Any:
     cal: Any = Calendar()
     cal.add("PRODID", "-//calendar-splitter//generated//EN")
     cal.add("VERSION", "2.0")
+    cal.add("NAME", vText(name))
     cal.add("X-WR-CALNAME", vText(name))
     if color:
         # apple reads the first, google and thunderbird the second
