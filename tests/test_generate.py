@@ -81,6 +81,26 @@ def test_fixed_event_uses_spec_timezone(tmp_path):
     assert slots[0].end - slots[0].start == timedelta(hours=5)
 
 
+def test_rule_color_reaches_every_slot(tmp_path):
+    spec = _spec(tmp_path, {"feed": "STUDY", "rules": [
+        {"kind": "fixed", "summary": "a", "start": "2026-10-17T12:00",
+         "end": "2026-10-17T13:00", "color": "teal"},
+        {"kind": "recurring", "summary": "b {rotate}", "rotate": ["x", "y"],
+         "from": "2026-09-07", "until": "2026-09-13", "days": ["mon", "tue"],
+         "per_week": 2, "color": "orange"},
+        {"kind": "fixed", "summary": "c", "start": "2026-10-18T12:00",
+         "end": "2026-10-18T13:00"}]})[0]
+    colors = {s.summary: s.color for s in generate_feed(spec, [])}
+    assert colors == {"a": "teal", "b x": "orange", "b y": "orange", "c": ""}
+
+
+def test_rejects_hex_rule_color(tmp_path):
+    with pytest.raises(ConfigError, match="css colour name"):
+        _spec(tmp_path, {"feed": "X", "rules": [
+            {"kind": "fixed", "summary": "s", "start": "2026-10-17T12:00",
+             "end": "2026-10-17T13:00", "color": "#1e40af"}]})
+
+
 def test_fixed_rejects_reversed_range(tmp_path):
     spec = _spec(tmp_path, {"feed": "X", "rules": [
         {"kind": "fixed", "summary": "s", "start": "2026-10-17T17:00",

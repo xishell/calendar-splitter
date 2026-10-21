@@ -72,6 +72,11 @@ Recovery tags cross feeds — a lower day is a lower day whether it came from `G
 anywhere else — while `max_per_day` counts only its own feed, so a morning lift does not consume
 the mobility allowance.
 
+### Colour
+
+A rule's `color` is written as `COLOR` on each of its events, overriding the feed colour in clients
+that honour it (Proton does). It takes a CSS colour name such as `teal`; hex is rejected.
+
 ### Waking hours
 
 A spec can declare `day_start` and `day_end`. Every recurring rule window is clamped to them at

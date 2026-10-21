@@ -48,6 +48,7 @@ class Slot:
     start: datetime
     end: datetime
     location: str = ""
+    color: str = ""
 
 
 @dataclass
@@ -58,6 +59,8 @@ class Rule:
     summary: str
     description: str = ""
     location: str = ""
+    # css colour name per event, so one feed can colour each course differently
+    color: str = ""
 
     # fixed
     start: str = ""
@@ -112,6 +115,12 @@ class FeedSpec:
         return ZoneInfo(self.timezone)
 
 
+def _check_color(color: str, where: str) -> None:
+    # rfc 7986 COLOR only takes css3 names, hex is invalid there
+    if color and not color.isalpha():
+        raise ConfigError(f"{where}: color must be a css colour name, got {color!r}")
+
+
 def _parse_rule(raw: dict[str, Any], where: str) -> Rule:
     kind = raw.get("kind", "")
     if kind not in ("fixed", "recurring"):
@@ -133,6 +142,7 @@ def _parse_rule(raw: dict[str, Any], where: str) -> Rule:
         summary=raw["summary"],
         description=raw.get("description", ""),
         location=raw.get("location", ""),
+        color=raw.get("color", ""),
         start=raw.get("start", ""),
         end=raw.get("end", ""),
         since=raw.get("from", ""),
@@ -154,6 +164,7 @@ def _parse_rule(raw: dict[str, Any], where: str) -> Rule:
 
     if "{rotate}" in rule.summary + rule.description and not rule.rotate:
         raise ConfigError(f"{where}: uses {{rotate}} but no rotate list, which blanks the summary")
+    _check_color(rule.color, where)
     if rule.prefer not in ("early", "late"):
         raise ConfigError(f"{where}: prefer must be 'early' or 'late', got {rule.prefer!r}")
     if kind == "fixed" and not (rule.start and rule.end):
@@ -329,6 +340,7 @@ def _place_one(
         start=start,
         end=finish,
         location=rule.location,
+        color=rule.color,
     )
 
 
@@ -383,6 +395,7 @@ def _apply_rotation(rule: Rule, slots: list[Slot]) -> list[Slot]:
             start=slot.start,
             end=slot.end,
             location=slot.location,
+            color=slot.color,
         )
         for i, slot in enumerate(sorted(slots, key=lambda s: s.start))
     ]
@@ -404,6 +417,7 @@ def _expand_fixed(rule: Rule, tz: ZoneInfo) -> list[Slot]:
             start=start,
             end=end,
             location=rule.location,
+            color=rule.color,
         )
     ]
 

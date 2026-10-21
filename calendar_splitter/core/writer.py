@@ -73,4 +73,6 @@ def build_generated_event(uid: str, slot: Any) -> Any:
     ev.add("DESCRIPTION", vText(slot.description or ""))
     if slot.location:
         ev.add("LOCATION", vText(slot.location))
+    if getattr(slot, "color", ""):
+        ev.add("COLOR", vText(slot.color))
     return ev

@@ -1,11 +1,17 @@
 """Tests for ICS output generation."""
 
 from datetime import UTC, datetime
+from types import SimpleNamespace
 
 from icalendar import Calendar
 
 from calendar_splitter.core.models import ClassifiedEvent, Event
-from calendar_splitter.core.writer import build_event, clone_calendar_base, new_calendar
+from calendar_splitter.core.writer import (
+    build_event,
+    build_generated_event,
+    clone_calendar_base,
+    new_calendar,
+)
 
 
 class TestCloneCalendarBase:
@@ -65,6 +71,21 @@ class TestGeneratedCalendar:
         ical = new_calendar("Study", color="#444a95").to_ical().decode()
         assert "X-APPLE-CALENDAR-COLOR:#444a95" in ical
         assert "X-OUTLOOK-COLOR:#444a95" in ical
+
+
+class TestGeneratedEvent:
+    def _slot(self, color):
+        start = datetime(2026, 10, 22, 9, 0, tzinfo=UTC)
+        return SimpleNamespace(summary="S", description="", location="", color=color,
+                               start=start, end=start.replace(hour=10))
+
+    def test_event_color_written_when_set(self):
+        ical = build_generated_event("u", self._slot("teal")).to_ical().decode()
+        assert "COLOR:teal" in ical
+
+    def test_no_event_color_when_unset(self):
+        ical = build_generated_event("u", self._slot("")).to_ical().decode()
+        assert "COLOR" not in ical
 
 
 class TestAllDayRoundTrip:
