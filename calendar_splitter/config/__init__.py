@@ -117,6 +117,7 @@ def _parse_event_type(data: dict[str, Any], course: str) -> EventType:
         display_name=display_name,
         patterns=patterns,
         unnumbered=unnumbered,
+        hide=bool(data.get("hide", False)),
         items=items,
     )
 

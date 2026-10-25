@@ -139,6 +139,11 @@ Each course is a JSON file (e.g. `courses/IS1200.json`):
 }
 ```
 
+### Hiding an event type
+
+`"hide": true` on an event type drops its matches from the course feed, for sessions that
+arrive from another calendar such as Canvas bookings. They still count as busy when specs are placed.
+
 ### Template variables
 
 **Summary:** `{kind}`, `{n}`, `{title}`, `{course}`

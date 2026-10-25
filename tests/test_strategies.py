@@ -159,3 +159,23 @@ class TestClassifyEvent:
         assert result is not None
         assert result.kind == "seminar"
         assert result.number is None
+
+    def test_hidden_event_type_is_filtered(self):
+        config = load_course_config({
+            "course_code": "TEST",
+            "detection": {"require_code_in_summary": False},
+            "event_types": [{"type": "lab", "patterns": ["Laboration"], "hide": True}],
+        })
+        ev = _make_event(summary="Laboration, TEST")
+        assert classify_event(ev, "TEST", config) is None
+
+    def test_hidden_type_leaves_other_events(self):
+        config = load_course_config({
+            "course_code": "TEST",
+            "detection": {"require_code_in_summary": False},
+            "event_types": [{"type": "lab", "patterns": ["Laboration"], "hide": True}],
+        })
+        ev = _make_event(summary="Föreläsning, TEST")
+        result = classify_event(ev, "TEST", config)
+        assert result is not None
+        assert result.kind is None
