@@ -56,6 +56,8 @@ class EventType:
     display_name: str
     patterns: list[re.Pattern[str]] = field(default_factory=list)
     unnumbered: bool = False
+    # dropped from the course feed but still busy for generated specs
+    hide: bool = False
     items: dict[int | None, EventItem] = field(default_factory=dict)
 
 

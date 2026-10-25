@@ -185,6 +185,8 @@ def classify_event(
         return None
 
     n, kind, event_type = _extract_number_and_kind(event.summary, config)
+    if event_type and event_type.hide:
+        return None
 
     ev = event
     matched_item: EventItem | None = None
